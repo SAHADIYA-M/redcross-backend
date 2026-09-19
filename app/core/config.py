@@ -26,6 +26,7 @@ class Settings:
         ]
         self.gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
         self.gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self.geocoder_provider: str = os.getenv("GEOCODER_PROVIDER", "stub")
 
 
 settings = Settings()
