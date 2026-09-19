@@ -2,13 +2,20 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.ai.schemas import NeedCategory
+from app.ai.schemas import NeedCategory, SeverityLevel
+from app.conflicts.schemas import InfrastructureStatus
 from app.location.schemas import LocationStatus
 from app.models.report import ReportStatus
 
 
 class CreateReport(BaseModel):
-    """Input schema for creating a report."""
+    """Input schema for creating a report.
+
+    Structured claims (severity, affected_population, needs,
+    infrastructure_status, available_needs) are optional: reports that do not
+    carry a claim leave the field unset, and missing claims are never treated
+    as conflicts.
+    """
 
     original_text: str
     reporter: str
@@ -20,6 +27,10 @@ class CreateReport(BaseModel):
     status: ReportStatus = ReportStatus.RECEIVED
     needs: list[NeedCategory] = Field(default_factory=list)
     location_status: LocationStatus | None = None
+    severity: SeverityLevel | None = None
+    affected_population: int | None = Field(default=None, ge=0)
+    infrastructure_status: InfrastructureStatus | None = None
+    available_needs: list[NeedCategory] = Field(default_factory=list)
 
 
 class UpdateReport(BaseModel):
@@ -38,6 +49,10 @@ class UpdateReport(BaseModel):
     status: ReportStatus | None = None
     needs: list[NeedCategory] | None = None
     location_status: LocationStatus | None = None
+    severity: SeverityLevel | None = None
+    affected_population: int | None = Field(default=None, ge=0)
+    infrastructure_status: InfrastructureStatus | None = None
+    available_needs: list[NeedCategory] | None = None
 
 
 class ReportResponse(BaseModel):
@@ -56,3 +71,7 @@ class ReportResponse(BaseModel):
     source: str | None = None
     needs: list[NeedCategory] = Field(default_factory=list)
     location_status: LocationStatus | None = None
+    severity: SeverityLevel | None = None
+    affected_population: int | None = Field(default=None, ge=0)
+    infrastructure_status: InfrastructureStatus | None = None
+    available_needs: list[NeedCategory] = Field(default_factory=list)

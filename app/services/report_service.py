@@ -37,6 +37,10 @@ class ReportService:
             source=data.source,
             needs=data.needs,
             location_status=data.location_status,
+            severity=data.severity,
+            affected_population=data.affected_population,
+            infrastructure_status=data.infrastructure_status,
+            available_needs=data.available_needs,
         )
         return self._repository.create(report)
 

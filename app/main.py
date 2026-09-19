@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.ai import router as ai_router
+from app.api.conflicts import router as conflicts_router
 from app.api.duplicates import router as duplicates_router
 from app.api.errors import register_exception_handlers
 from app.api.locations import router as locations_router
@@ -20,6 +21,7 @@ app.include_router(reports_router)
 app.include_router(ai_router)
 app.include_router(locations_router)
 app.include_router(duplicates_router)
+app.include_router(conflicts_router)
 
 app.add_middleware(
     CORSMiddleware,
