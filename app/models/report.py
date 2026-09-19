@@ -3,6 +3,9 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from app.ai.schemas import NeedCategory
+from app.location.schemas import LocationStatus
+
 
 class ReportStatus(str, Enum):
     """Lifecycle status of a report."""
@@ -28,3 +31,5 @@ class Report(BaseModel):
     evidence: list[str] = Field(default_factory=list)
     status: ReportStatus = ReportStatus.RECEIVED
     source: str | None = None
+    needs: list[NeedCategory] = Field(default_factory=list)
+    location_status: LocationStatus | None = None

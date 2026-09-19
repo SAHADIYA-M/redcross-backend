@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.ai.schemas import NeedCategory
+from app.location.schemas import LocationStatus
 from app.models.report import ReportStatus
 
 
@@ -16,6 +18,8 @@ class CreateReport(BaseModel):
     evidence: list[str] = Field(default_factory=list)
     source: str | None = None
     status: ReportStatus = ReportStatus.RECEIVED
+    needs: list[NeedCategory] = Field(default_factory=list)
+    location_status: LocationStatus | None = None
 
 
 class UpdateReport(BaseModel):
@@ -32,6 +36,8 @@ class UpdateReport(BaseModel):
     evidence: list[str] | None = None
     source: str | None = None
     status: ReportStatus | None = None
+    needs: list[NeedCategory] | None = None
+    location_status: LocationStatus | None = None
 
 
 class ReportResponse(BaseModel):
@@ -48,3 +54,5 @@ class ReportResponse(BaseModel):
     evidence: list[str] = Field(default_factory=list)
     status: ReportStatus = ReportStatus.RECEIVED
     source: str | None = None
+    needs: list[NeedCategory] = Field(default_factory=list)
+    location_status: LocationStatus | None = None

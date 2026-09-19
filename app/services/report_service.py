@@ -35,6 +35,8 @@ class ReportService:
             evidence=data.evidence,
             status=data.status,
             source=data.source,
+            needs=data.needs,
+            location_status=data.location_status,
         )
         return self._repository.create(report)
 

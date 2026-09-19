@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.repositories import InMemoryReportRepository
+from app.repositories.report_repository import ReportRepository
 from app.schemas.report import CreateReport, ReportResponse, UpdateReport
 from app.services.report_service import ReportNotFoundError, ReportService
 
@@ -10,6 +11,16 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 _repository = InMemoryReportRepository()
 _report_service = ReportService(_repository)
+
+
+def get_report_repository() -> ReportRepository:
+    """Return the shared in-memory report repository.
+
+    Exposed so other features (e.g. duplicate detection) operate on exactly
+    the same reports as the reports API. Swap the storage backend here without
+    touching the routers.
+    """
+    return _repository
 
 
 def get_report_service() -> ReportService:
