@@ -1,143 +1,131 @@
-# redcross-backend
-# Operational Picture — Humanitarian Needs Assessment MVP
+# Backend — Operational Picture (Humanitarian Needs Assessment MVP)
 
 > **Status: TEMPORARY / SCAFFOLD README**
-> This is a placeholder problem-statement (PS) document written before the research document has been reviewed. Once the research doc is shared, this file should be expanded/corrected section by section — especially Tech Stack, Data Sources, DB Schema, and AI Prompts, which need to be grounded in the actual findings.
+> Placeholder for the backend service/repo, written before the research document and final tech stack are confirmed. Update once those are finalized — especially Tech Stack, Environment Variables, DB Schema, and API Endpoints.
 
 ---
 
-## 1. Problem Statement
+## 1. What This Service Does
 
-During disasters, humanitarian responders don't lack information — they lack a **usable** picture of it. Field reports, calls, messages, and photos come in fragmented, inconsistent, duplicated, and sometimes contradictory. Existing "disaster dashboards" usually just visualize whatever data is fed to them; they don't help anyone figure out **who is affected, what they need, where, and how urgent it is** — while being honest about what is uncertain or missing.
+The backend is responsible for:
+- Ingesting field reports (text, location, optional photo/file, timestamp)
+- Running the AI pipeline (extraction → classification → severity → duplicate/conflict detection → priority scoring)
+- Storing structured, traceable data (source, timestamp, location, confidence, verification status, original evidence — always preserved)
+- Serving the human verification/edit/approval workflow
+- Exposing geocoding + map data
+- Detecting and exposing information gaps (not just what's known — what's *missing*)
+- Providing search/filter and audit trail endpoints to the frontend dashboard
 
-**We are explicitly not building a generic disaster-management dashboard.**
-
-We are building a system that converts messy, fragmented humanitarian information into a **structured, location-aware, prioritized, traceable, uncertainty-aware operational picture** — where AI assists human responders, and never replaces their judgment.
-
-Core design principle: **absence of reports ≠ absence of need.** The system must actively surface where it has no information, not just display what it has.
-
----
-
-## 2. Core MVP Features
-
-| # | Feature | Purpose |
-|---|---------|---------|
-| 1 | Field report submission | Text, location, optional photo/file, timestamp |
-| 2 | AI extraction | Pull out people, needs, places, facilities, time, severity from raw text |
-| 3 | Need classification | Map extracted needs to fixed categories |
-| 4 | Geolocation + human correction | Resolve ambiguous/inconsistent location mentions, let a human fix bad matches |
-| 5 | Interactive map | Visualize reports and needs geographically |
-| 6 | Duplicate & conflict detection | Flag reports that likely describe the same event/need, or contradict each other |
-| 7 | Transparent priority recommendation | Score/rank urgency with a visible, explainable rationale — not a black-box number |
-| 8 | Human verification/edit/approval workflow | Every AI output is a draft until a human reviews it |
-| 9 | Evidence/source traceability | Every claim links back to its original report(s) |
-| 10 | Information-gap detection | Actively flag areas/topics with no or stale data |
-| 11 | Responder dashboard | Operational view for decision-making |
-| 12 | Search/filter | Find reports/needs by location, category, status, time, confidence |
-| 13 | Basic audit trail | Who changed what, when |
-| 14 | Continuous status updates | Needs/reports evolve over time, not one-shot snapshots |
-
-**Non-negotiable data integrity rule:** every important finding retains — source, timestamp, location, confidence, verification status, and original evidence — at all times.
+AI outputs here are always **drafts pending human review** — the backend must never auto-publish an AI classification/priority score as final without a verification step.
 
 ---
 
-## 3. Research Requirements to Account For
+## 2. Tech Stack *(placeholder — pending confirmation)*
 
-- Fragmented / unstructured information
-- Inconsistent terminology and location naming
-- Duplicate and conflicting reports
-- Unverified / outdated information
-- Hard-to-reach and underreported communities
-- Poor connectivity
-- Infrastructure damage vs. actual service disruption (a damaged road ≠ the area is unreachable; a standing hospital ≠ it's functional)
-- Uncertainty in early assessments (early data is sparse and shouldn't be treated as ground truth)
-- Privacy / protection risks (especially for vulnerable individuals named in reports)
-- Response coverage (are responders actually reaching the places with the greatest need?)
-
----
-
-## 4. Data & APIs *(placeholder — to confirm against research doc)*
-
-Preference order:
-1. Field reports (our own primary data)
-2. Official humanitarian APIs (e.g., ReliefWeb, HDX/Humanitarian Data Exchange, ACLED, GDACS — to verify availability/licensing)
-3. Public datasets
-4. OpenStreetMap / open geospatial data (Nominatim or similar for geocoding)
-
-Avoid scraping unless genuinely necessary and permitted.
-
-**For each external source, to be filled in once confirmed:**
-- What it provides
-- API availability
-- Free tier / cost
-- Auth/key requirements
-- Licensing
-- Usefulness for MVP
-
----
-
-## 5. Tech Stack *(placeholder — pending confirmation)*
-
-Single, practical, free-first stack (no unnecessary microservices):
-
-| Layer | Choice (tentative) |
-|-------|--------------------|
-| Frontend | TBD |
-| Backend | TBD |
+| Component | Choice (tentative) |
+|---|---|
+| Language/framework | TBD |
 | Database | PostgreSQL (+ PostGIS for geospatial queries) |
+| ORM/migrations | TBD |
 | Auth | TBD |
-| AI | TBD |
+| AI provider/SDK | TBD |
 | Geocoding | OpenStreetMap/Nominatim (tentative) |
-| Maps | TBD (e.g., Leaflet + OSM tiles) |
-| Storage | TBD |
-| Hosting | TBD |
+| File/photo storage | TBD |
 | Testing | TBD |
-| Version control | GitHub |
+| Hosting | TBD |
 
 ---
 
-## 6. AI Pipeline *(placeholder — prompts to be drafted per module)*
+## 3. Project Structure *(placeholder — to confirm once framework is chosen)*
 
-AI modules needed, each with structured JSON I/O:
+```
+backend/
+├── src/
+│   ├── routes/           # REST API endpoints
+│   ├── controllers/
+│   ├── services/
+│   │   ├── ai/           # extraction, classification, severity, duplicate/conflict, priority
+│   │   ├── geocoding/
+│   │   └── audit/
+│   ├── models/            # DB models/schema
+│   ├── middleware/         # auth, validation, error handling
+│   └── config/
+├── tests/
+├── migrations/
+├── .env.example
+├── README.md              # this file
+└── package.json / requirements.txt / etc.
+```
+
+---
+
+## 4. Environment Variables *(placeholder)*
+
+All secrets via environment variables — never hardcoded. Example `.env.example` to be created once stack is finalized:
+
+```
+DATABASE_URL=
+AI_API_KEY=
+GEOCODING_API_KEY=      # if needed
+STORAGE_BUCKET=
+JWT_SECRET=
+```
+
+---
+
+## 5. Database Schema *(placeholder — draft after research doc review)*
+
+Core entities expected (subject to change):
+
+- **reports** — raw field report (text, location, media, timestamp, submitter, source)
+- **extractions** — AI-extracted structured data per report (people, needs, places, facilities, time, severity), linked to source report, with confidence scores
+- **needs** — classified need entries (fixed category, location, severity, status)
+- **locations** — resolved/geocoded locations, with human-correction history
+- **duplicates_conflicts** — links between reports flagged as duplicate or conflicting
+- **priority_scores** — computed priority per need/area, with explainable rationale
+- **verifications** — human review/edit/approval actions, linked to user + timestamp
+- **information_gaps** — flagged areas/topics with no or stale data
+- **audit_log** — who changed what, when, across all entities
+
+Every table involving a "finding" must retain: source, timestamp, location, confidence, verification status, and a reference to original evidence.
+
+---
+
+## 6. API Endpoints *(placeholder — to expand into full spec)*
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/api/reports` | Submit a new field report |
+| GET | `/api/reports` | List/search/filter reports |
+| GET | `/api/reports/:id` | Get single report + linked extraction/evidence |
+| POST | `/api/reports/:id/extract` | Run AI extraction on a report |
+| GET | `/api/needs` | List classified needs (filterable by location, category, status, confidence) |
+| PATCH | `/api/needs/:id/verify` | Human verify/edit/approve a need entry |
+| GET | `/api/duplicates` | List flagged duplicate/conflicting report groups |
+| GET | `/api/priority` | Get current priority rankings with rationale |
+| GET | `/api/locations/:id/correct` | Human correction of ambiguous geocoding |
+| GET | `/api/gaps` | List detected information gaps |
+| GET | `/api/audit` | Audit trail query |
+
+---
+
+## 7. AI Pipeline Modules *(placeholder — prompts live in `src/services/ai/`)*
+
 1. Information extraction
-2. Need classification
+2. Need classification (fixed categories)
 3. Severity assessment
 4. Duplicate detection
 5. Conflict detection
-6. Priority recommendation (with visible rationale)
+6. Priority recommendation (transparent rationale, not a black box)
 7. Summarization / search assistance
 
-**Hard rule for all prompts:** AI must never hallucinate or invent missing information. Every output preserves uncertainty (confidence scores, "unknown" fields) and links to evidence (source report IDs).
+**Hard rule:** AI must never hallucinate or invent missing information. Every module preserves uncertainty (confidence scores, explicit "unknown" fields) and returns source report references for every claim.
 
 ---
 
-## 7. Deliverables Checklist
+## 8. Working Rules for Implementation
 
-- [ ] System architecture diagram
-- [ ] Database schema
-- [ ] REST API endpoint list
-- [ ] Frontend screens/routes
-- [ ] AI pipeline + prompts (per module above)
-- [ ] GitHub folder structure
-- [ ] Implementation phases
-- [ ] Claude coding prompts per phase
-- [ ] Synthetic disaster reports for testing
-- [ ] MVP vs. Nice-to-have vs. Future feature split
-- [ ] 2–3 minute hackathon demo script
-
----
-
-## 8. Demo Flow (target)
-
-Single disaster scenario, one continuous narrative:
-
-**Messy field report → AI extraction → location resolution → map → priority scoring → duplicate/conflict flagging → human verification → dashboard → information-gap surfaced → evidence-backed search → final operational picture.**
-
----
-
-## 9. Working Rules for Claude Coding Prompts
-
-Every coding prompt given to Claude during implementation should instruct it to:
+For every coding change/milestone in this repo:
 1. Inspect existing code first
 2. Avoid rewriting working code
 3. Keep dependencies minimal
@@ -149,13 +137,13 @@ Every coding prompt given to Claude during implementation should instruct it to:
 
 ---
 
-## 10. Open Items / Next Steps
+## 9. Open Items / Next Steps
 
-- [ ] Review research document once shared — update Data & APIs, Tech Stack, DB Schema, AI Prompts sections accordingly
-- [ ] Finalize tech stack
-- [ ] Draft database schema
-- [ ] Draft API endpoint list
-- [ ] Write AI prompts for each pipeline module
+- [ ] Confirm tech stack (framework, ORM, hosting)
+- [ ] Finalize DB schema + write migrations
+- [ ] Write full API spec
+- [ ] Implement AI pipeline modules + prompts
+- [ ] Set up geocoding service
 - [ ] Build synthetic test dataset
-- [ ] Split features into MVP / Nice-to-have / Future
-- [ ] Write phase-by-phase Claude coding prompts
+- [ ] Set up basic auth
+- [ ] Set up audit logging
