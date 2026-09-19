@@ -6,6 +6,7 @@ from app.ai.client import AIClient
 from app.ai.errors import AIResponseError
 from app.ai.prompt import SYSTEM_PROMPT
 from app.ai.schemas import AIExtraction
+from app.ai.validation import AIValidator
 
 
 def _build_prompt(report_text: str) -> str:
@@ -13,24 +14,33 @@ def _build_prompt(report_text: str) -> str:
 
 
 class AIService:
-    """Orchestrates AI analysis of a report's original text.
+    """Orchestrates the AI analysis pipeline.
+
+    Pipeline: send report text to the AI client -> parse and strictly validate
+    the JSON with Pydantic -> backend validation and need classification.
 
     Depends on the AIClient interface only, so the real Gemini client can be
     replaced with a fake in tests and later swapped without changing callers.
     """
 
-    def __init__(self, client: AIClient) -> None:
+    def __init__(
+        self,
+        client: AIClient,
+        validator: AIValidator | None = None,
+    ) -> None:
         self._client = client
+        self._validator = validator or AIValidator()
 
     def analyze(self, report_text: str) -> AIExtraction:
-        """Extract structured humanitarian information from report text."""
+        """Return the backend-validated structured information for a report."""
         raw_json = self._client.generate_json(
             system_instruction=SYSTEM_PROMPT,
             prompt=_build_prompt(report_text),
         )
-        return self._validate(raw_json)
+        extraction = self._parse(raw_json)
+        return self._validator.validate(extraction, report_text)
 
-    def _validate(self, raw_json: str) -> AIExtraction:
+    def _parse(self, raw_json: str) -> AIExtraction:
         if not raw_json.strip():
             raise AIResponseError("AI returned an empty response.")
 
