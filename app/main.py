@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.errors import register_exception_handlers
+from app.api.reports import router as reports_router
 from app.core.config import settings
 from app.schemas.response import HealthResponse, MessageResponse
 
@@ -11,6 +12,8 @@ app = FastAPI(
     "Operational Intelligence system.",
     version=settings.app_version,
 )
+
+app.include_router(reports_router)
 
 app.add_middleware(
     CORSMiddleware,
