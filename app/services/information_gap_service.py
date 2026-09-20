@@ -45,11 +45,12 @@ from app.information_gap.schemas import (
     InformationGapResponse,
     InformationGapStatus,
 )
+from app.location.projection import resolve_confirmed_point
 from app.location.schemas import LocationStatus
 from app.location.service import LocationService
 from app.models.report import Report
 from app.repositories.report_repository import ReportRepository
-from app.services.map_service import is_null_island
+from app.utils.datetime_utils import as_utc
 from app.verification.schemas import VerificationStatus
 
 # ------------------------------------------------------------- score weights
@@ -67,16 +68,9 @@ EMPTY_CELL_SCORE = 100
 EMPTY_CELL_REASON = "No reports available for this area."
 
 
-def _as_utc(value: datetime) -> datetime:
-    """Normalize a datetime for comparison without shifting its meaning."""
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
 def _days_between(latest: datetime, now: datetime) -> float:
     """Age of the newest report, in days, as a non-negative float."""
-    return max(0.0, (now - _as_utc(latest)).total_seconds() / 86400.0)
+    return max(0.0, (now - as_utc(latest)).total_seconds() / 86400.0)
 
 
 # ---------------------------------------------------------------- cell grid
@@ -296,18 +290,11 @@ class InformationGapService:
         report with no resolvable location is not stuck on the map anywhere;
         it simply has no known position.
         """
-        if report.location is None or not report.location.strip():
+        point = resolve_confirmed_point(report.location, self._location_service)
+        if point is None:
             return None
-        result = self._location_service.geocode(report.location)
-        if (
-            result.status != LocationStatus.CONFIRMED
-            or result.latitude is None
-            or result.longitude is None
-        ):
-            return None
-        if is_null_island(result.latitude, result.longitude):
-            return None
-        return grid_cell_anchor(result.latitude, result.longitude, size)
+        lat, lng, _ = point
+        return grid_cell_anchor(lat, lng, size)
 
     @staticmethod
     def _cells_in_scope(

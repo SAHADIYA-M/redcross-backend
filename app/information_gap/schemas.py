@@ -22,6 +22,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.utils.validators import validate_bbox
+
 DEFAULT_CELL_SIZE = 0.05
 MIN_CELL_SIZE = 0.01
 MAX_CELL_SIZE = 1.0
@@ -87,19 +89,16 @@ class InformationGapQuery(BaseModel):
 
     @model_validator(mode="after")
     def _validate_bounding_box(self) -> "InformationGapQuery":
-        bbox_parts = (self.min_lat, self.max_lat, self.min_lon, self.max_lon)
-        any_bbox = any(part is not None for part in bbox_parts)
-        if any_bbox and not all(part is not None for part in bbox_parts):
-            raise ValueError(
+        validate_bbox(
+            self.min_lat,
+            self.max_lat,
+            self.min_lon,
+            self.max_lon,
+            missing_message=(
                 "min_lat, max_lat, min_lon and max_lon must all be supplied "
                 "together to define the analysis area"
-            )
-        if self.min_lat is not None and self.max_lat is not None:
-            if self.min_lat > self.max_lat:
-                raise ValueError("min_lat must be <= max_lat")
-        if self.min_lon is not None and self.max_lon is not None:
-            if self.min_lon > self.max_lon:
-                raise ValueError("min_lon must be <= max_lon")
+            ),
+        )
         return self
 
 

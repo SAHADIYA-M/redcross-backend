@@ -18,6 +18,3 @@ class InMemoryAuditRepository(AuditRepository):
 
     def get_all(self) -> list[AuditRecord]:
         return list(self._records.values())
-
-    def get_by_report(self, report_id: str) -> list[AuditRecord]:
-        return [r for r in self._records.values() if r.report_id == report_id]

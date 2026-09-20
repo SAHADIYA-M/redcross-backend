@@ -14,7 +14,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.api.deps import get_auth_service, require_roles
 from app.models.user import User, UserRole
 from app.schemas.auth import UserResponse, UserUpdate
-from app.services.auth_service import AuthService, UserNotFoundError
+from app.services.auth_service import (
+    AuthService,
+    UserNotFoundError,
+    SelfModificationError,
+    FinalAdminLockoutError,
+)
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -39,10 +44,20 @@ def update_user(
 ) -> UserResponse:
     """Assign a role and/or toggle activation for a user (ADMIN only)."""
     try:
-        user = service.update_user(user_id, data)
+        user = service.update_user(user_id, data, _admin.user_id)
     except UserNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except SelfModificationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except FinalAdminLockoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
     return UserResponse.model_validate(user)

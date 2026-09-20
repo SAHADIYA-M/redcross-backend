@@ -3,38 +3,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_current_active_user, require_roles
+from app.core.container import get_report_service
 from app.models.user import REPORT_WRITER_ROLES, User
-from app.repositories import InMemoryReportRepository
-from app.repositories.report_repository import ReportRepository
 from app.schemas.report import CreateReport, ReportResponse, UpdateReport
-from app.services.report_service import ReportNotFoundError, ReportService
+from app.services.report_service import ReportNotFoundError
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 _report_writer = require_roles(*sorted(REPORT_WRITER_ROLES))
-
-_repository = InMemoryReportRepository()
-_report_service = ReportService(_repository)
-
-
-def get_report_repository() -> ReportRepository:
-    """Return the shared in-memory report repository.
-
-    Exposed so other features (e.g. duplicate detection) operate on exactly
-    the same reports as the reports API. Swap the storage backend here without
-    touching the routers.
-    """
-    return _repository
-
-
-def get_report_service() -> ReportService:
-    """Return the shared report service.
-
-    A single in-memory repository instance is created once at import time so
-    report data persists across requests. The storage backend is swapped here
-    (e.g. for a database-backed repository) without changing the router.
-    """
-    return _report_service
 
 
 @router.post(

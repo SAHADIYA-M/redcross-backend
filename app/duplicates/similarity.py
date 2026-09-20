@@ -109,8 +109,11 @@ def time_similarity(report_a: Report, report_b: Report) -> float | None:
     """Temporal closeness of report timestamps (0..1, None if missing)."""
     if report_a.timestamp is None or report_b.timestamp is None:
         return None
+        
+    from app.utils.datetime_utils import as_utc
+    
     diff_hours = abs(
-        (report_a.timestamp - report_b.timestamp).total_seconds() / 3600.0
+        (as_utc(report_a.timestamp) - as_utc(report_b.timestamp)).total_seconds() / 3600.0
     )
     return max(0.0, 1.0 - diff_hours / TIME_WINDOW_HOURS)
 

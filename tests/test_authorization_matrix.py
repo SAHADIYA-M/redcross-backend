@@ -13,8 +13,6 @@ convenience and the authoritative role is loaded from the user repository.
 
 import uuid
 
-import pytest
-
 from app.models.user import UserRole
 from tests.helpers import headers_for
 
@@ -34,7 +32,7 @@ CASES: list[tuple[str, str, set[UserRole]]] = [
     ("GET", "/api/reports", ALL_ROLES),
     ("GET", f"/api/reports/{REPORT_ID}", ALL_ROLES),
     ("GET", "/api/verification", ALL_ROLES),
-    ("GET", "/api/audit", ALL_ROLES),
+    ("GET", "/api/audit", REVIEWERS),  # reviewer-only read: audit trail
     ("GET", "/api/search/reports", ALL_ROLES),
     ("GET", "/api/map/reports", ALL_ROLES),
     ("GET", "/api/map/information-gaps", ALL_ROLES),
@@ -105,7 +103,11 @@ def test_wrong_role_is_never_granted(app_client, auth_setup) -> None:
 
 
 def test_any_active_role_can_read(app_client, auth_setup) -> None:
-    """Reads never depend on role; the weakest role sees the same data."""
+    """Reads never depend on role; the weakest role sees the same data.
+
+    The audit trail is an exception: it is a reviewer-only read (REVIEWER or
+    ADMIN) and therefore NOT part of these open listings.
+    """
     report = _create_report(app_client)
     for role in ALL_ROLES:
         headers = headers_for(auth_setup, role)
@@ -113,7 +115,6 @@ def test_any_active_role_can_read(app_client, auth_setup) -> None:
             "/api/reports": (200, None),
             f"/api/reports/{report['id']}": (200, None),
             "/api/verification": (200, None),
-            "/api/audit": (200, None),
             "/api/search/reports": (200, None),
             "/api/map/reports": (200, None),
             "/api/map/information-gaps": (200, None),
@@ -185,6 +186,11 @@ def test_active_staff_write_what_they_own(app_client, auth_setup) -> None:
         headers=headers_for(auth_setup, R.REVIEWER),
     )
     assert reviewed.status_code == 200
+
+    # REVIEWER (like ADMIN) can read the audit trail; other roles are denied.
+    trail = app_client.get("/api/audit", headers=headers_for(auth_setup, R.REVIEWER))
+    assert trail.status_code == 200
+    assert app_client.get("/api/audit", headers=headers_for(auth_setup, R.ASSESSOR)).status_code == 403
 
     # RESPONDER owns response activities.
     responded = app_client.post(

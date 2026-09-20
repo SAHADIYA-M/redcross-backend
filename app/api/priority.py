@@ -3,27 +3,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_current_active_user
-from app.api.reports import get_report_repository
+from app.core.container import get_priority_service
 from app.models.user import User
-from app.repositories.report_repository import ReportRepository
 from app.schemas.priority import PriorityResponse
-from app.services.priority_service import (
-    InsufficientPriorityDataError,
-    PriorityService,
-)
+from app.services.priority_service import InsufficientPriorityDataError
 from app.services.report_service import ReportNotFoundError
 
 router = APIRouter(prefix="/api/reports", tags=["priority"])
-
-
-def get_priority_service() -> PriorityService:
-    """Return the priority service over the shared reports repository.
-
-    The calculation is fully backend-controlled: the AI never contributes a
-    score. Storage is swapped in get_report_repository without touching this
-    router or the calculation logic.
-    """
-    return PriorityService(get_report_repository())
 
 
 @router.post("/{report_id}/priority", response_model=PriorityResponse)

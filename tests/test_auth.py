@@ -349,7 +349,7 @@ def test_admin_can_list_users(role_client) -> None:
 
 def test_inactive_user_is_forbidden(auth_setup, role_client) -> None:
     viewer = auth_setup.users[UserRole.VIEWER]
-    auth_setup.service.update_user(viewer.user_id, UserUpdate(is_active=False))
+    auth_setup.service.update_user(viewer.user_id, UserUpdate(is_active=False), "admin-id")
     client = role_client(UserRole.VIEWER)
     response = client.get("/api/reports")
     assert response.status_code == 403

@@ -13,6 +13,7 @@ from app.api.priority import get_priority_service
 from app.api.reports import get_report_service
 from app.api.responses import get_response_repository, get_response_service
 from app.api.verification import get_audit_repository, get_verification_service
+from app.location.projection import is_null_island
 from app.location.providers import StubGeocoder
 from app.location.schemas import GeocodeMatch
 from app.location.service import LocationService
@@ -22,7 +23,6 @@ from app.repositories.in_memory_audit_repository import InMemoryAuditRepository
 from app.repositories.in_memory_verification_repository import (
     InMemoryVerificationRepository,
 )
-from app.services.map_service import is_null_island
 from app.services.priority_service import PriorityService
 from app.services.report_service import ReportService
 from app.services.response_map_service import ResponseMapService

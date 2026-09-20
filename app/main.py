@@ -21,7 +21,10 @@ from app.api.verification import router as verification_router
 from app.api.verification import verification_list_router
 from app.core.config import settings
 from app.schemas.response import HealthResponse, MessageResponse
-from app.services.auth_service import AuthService, seed_development_admin
+from app.services.auth_service import seed_development_admin
+
+if settings.environment == "production":
+    settings.effective_jwt_secret_key()
 
 app = FastAPI(
     title=settings.app_name,

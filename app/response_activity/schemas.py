@@ -20,7 +20,7 @@ or heuristic matching is never used, and a response is never attached to an
 arbitrary report.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.ai.schemas import NeedCategory
 from app.location.schemas import LocationStatus
 from app.priority.schemas import PriorityLevel
+from app.utils.validators import validate_time_range
 from app.verification.schemas import VerificationStatus
 
 
@@ -191,20 +192,8 @@ class ResponseQuery(BaseModel):
 
     @model_validator(mode="after")
     def _validate_time_range(self) -> "ResponseQuery":
-        if (
-            self.start_time is not None
-            and self.end_time is not None
-            and _as_utc(self.start_time) > _as_utc(self.end_time)
-        ):
-            raise ValueError("start_time must be <= end_time")
+        validate_time_range(self.start_time, self.end_time)
         return self
-
-
-def _as_utc(value: datetime) -> datetime:
-    """Normalize a datetime for comparison without shifting its meaning."""
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
 
 
 def coverage_semantics_doc() -> str:

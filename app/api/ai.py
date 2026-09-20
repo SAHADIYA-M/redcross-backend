@@ -16,7 +16,11 @@ router = APIRouter(prefix="/api/ai", tags=["ai"])
 def get_ai_service() -> AIService:
     """Build the AI service backed by the real Gemini client."""
     client = GeminiClient(api_key=settings.gemini_api_key, model=settings.gemini_model)
-    return AIService(client)
+    return AIService(
+        client,
+        max_retries=settings.ai_max_retries,
+        retry_backoff_seconds=settings.ai_retry_backoff_seconds,
+    )
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
@@ -30,7 +34,7 @@ def analyze_report(
     except AIConfigurationError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="AI analysis is not configured (missing GEMINI_API_KEY).",
+            detail="AI analysis is not configured.",
         ) from exc
     except AIGatewayError as exc:
         raise HTTPException(

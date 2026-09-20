@@ -13,32 +13,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import get_current_active_user
-from app.api.priority import get_priority_service
-from app.api.reports import get_report_repository
-from app.core.config import settings
-from app.location.errors import GeocoderConfigurationError
-from app.location.providers import build_geocoder
-from app.location.service import LocationService
+from app.api.geocoder_deps import get_optional_location_service
+from app.core.container import get_priority_service, get_report_repository
 from app.models.user import User
-from app.repositories.report_repository import ReportRepository
 from app.schemas.search import SearchResponse
 from app.search.schemas import SearchQuery
 from app.search.service import LocationSearchUnavailableError, SearchService
-from app.services.priority_service import PriorityService
+from app.location.errors import LocationError
 
 router = APIRouter(prefix="/api/search", tags=["search"])
-
-
-def get_location_service() -> LocationService | None:
-    """Return the configured geocoder-backed location service.
-
-    Returns None when the provider is not configured. Bounding-box filters
-    need this service; all other filters work without it.
-    """
-    try:
-        return LocationService(build_geocoder(settings.geocoder_provider))
-    except GeocoderConfigurationError:
-        return None
 
 
 def get_search_service() -> SearchService:
@@ -51,7 +34,7 @@ def get_search_service() -> SearchService:
     return SearchService(
         repository=get_report_repository(),
         priority_service=get_priority_service(),
-        location_service=get_location_service(),
+        location_service=get_optional_location_service(),
     )
 
 
@@ -74,4 +57,9 @@ def search_reports(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
+        ) from exc
+    except LocationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Geocoder temporarily unavailable",
         ) from exc

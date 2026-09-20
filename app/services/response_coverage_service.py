@@ -63,6 +63,7 @@ from app.response_activity.schemas import (
     CoverageStatus,
     ResponseStatus,
 )
+from app.schemas.priority import PriorityResponse
 from app.services.priority_service import (
     InsufficientPriorityDataError,
     PriorityService,
@@ -85,7 +86,15 @@ class ResponseCoverageService:
         )
 
     def calculate(self, query: CoverageQuery) -> CoverageResponse:
-        """Return one coverage row per reported need of every matching report."""
+        """Return one coverage row per reported need of every matching report.
+
+        Non-priority filters are applied first, then priority scores are
+        computed once per report (and only for reports that can carry a
+        priority) through the Phase 8 service and reused by the priority
+        filter and the output items - a score is never calculated twice within
+        a single request, mirroring SearchService. Reports that can never
+        carry a priority map to None/absent everywhere.
+        """
         reports = self._report_repository.get_all()
         responses_by_report: dict[str, list] = {}
         for response in self._response_repository.get_all():
@@ -93,18 +102,34 @@ class ResponseCoverageService:
                 response
             )
 
+        candidates = [
+            report for report in reports if self._matches(report, query)
+        ]
+        priorities = self._priority_map(
+            candidates
+            if query.priority is not None
+            else [report for report in candidates if report.needs]
+        )
+        if query.priority is not None:
+            candidates = [
+                report
+                for report in candidates
+                if self._matches_priority(report.id, query, priorities)
+            ]
+
         items: list[CoverageItem] = []
-        for report in sorted(reports, key=lambda r: r.id):
-            if not self._report_matches(report, query):
-                continue
-            items.extend(self._report_items(report, query, responses_by_report))
+        for report in sorted(candidates, key=lambda r: r.id):
+            items.extend(
+                self._report_items(report, query, responses_by_report, priorities)
+            )
 
         items.sort(key=lambda item: (item.report_id, item.need.value))
         return CoverageResponse(items=items, total=len(items))
 
     # ------------------------------------------------------------- internals
 
-    def _report_matches(self, report: Report, query: CoverageQuery) -> bool:
+    def _matches(self, report: Report, query: CoverageQuery) -> bool:
+        """Apply every non-priority filter; all conditions must hold (AND)."""
         if query.report_id is not None and report.id != query.report_id:
             return False
         if query.verification_status is not None and (
@@ -113,23 +138,30 @@ class ResponseCoverageService:
             return False
         if query.need is not None and query.need not in report.needs:
             return False
-        if query.priority is not None:
-            priority = self._priority_for(report.id)
-            if priority is None or priority.priority_level != query.priority:
-                # A report whose priority is unknown never matches a priority
-                # filter (it is never coerced to a level), matching search.
-                return False
         return True
+
+    @staticmethod
+    def _matches_priority(
+        report_id: str,
+        query: CoverageQuery,
+        priorities: dict[str, PriorityResponse | None],
+    ) -> bool:
+        """Apply the priority filter; unknown priorities never match."""
+        priority = priorities.get(report_id)
+        if priority is None:
+            return False
+        return priority.priority_level == query.priority
 
     def _report_items(
         self,
         report: Report,
         query: CoverageQuery,
         responses_by_report: dict[str, list],
+        priorities: dict[str, PriorityResponse | None],
     ) -> list[CoverageItem]:
         if not report.needs:
             return []
-        priority = self._priority_for(report.id)
+        priority = priorities.get(report.id)
         responses = responses_by_report.get(report.id, [])
         return [
             self._need_item(report, need, priority.priority_level if priority else None,
@@ -205,7 +237,21 @@ class ResponseCoverageService:
         # Quantitative coverage is never invented when either side is missing.
         return CoverageStatus.RESPONSE_RECORDED, None
 
-    def _priority_for(self, report_id: str):
+    def _priority_map(
+        self, reports: list[Report]
+    ) -> dict[str, PriorityResponse | None]:
+        """Compute priority once per report via the Phase 8 service.
+
+        Reports without usable priority input are omitted (None when looked
+        up), so filtering and output agree within a single coverage call.
+        """
+        return {
+            report.id: self._calculate(report.id)
+            for report in reports
+            if report.has_priority_signal
+        }
+
+    def _calculate(self, report_id: str) -> PriorityResponse | None:
         try:
             return self._priority_service.calculate_for_report(report_id)
         except InsufficientPriorityDataError:

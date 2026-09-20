@@ -9,7 +9,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.user import User, UserRole
+from app.models.user import UserRole
 
 
 class UserCreate(BaseModel):
@@ -36,9 +36,11 @@ class UserCreate(BaseModel):
 
     @field_validator("password")
     @classmethod
-    def _password_not_blank(cls, value: str) -> str:
+    def _validate_password(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("password must not be blank")
+        if len(value.encode('utf-8')) > 72:
+            raise ValueError("password must be 72 bytes or fewer")
         return value
 
 

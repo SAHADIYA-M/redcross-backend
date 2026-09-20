@@ -23,10 +23,18 @@ class LocationService:
 
     Depends only on the Geocoder interface, so the provider can be swapped
     without touching the routes or schemas.
+
+    A single request-scoped instance may geocode the same raw location several
+    times (e.g. a bounding-box filter and the projection step both need
+    coordinates); results are memoized per instance so the provider is never
+    called twice for the same location within one request. Instances are built
+    per request by the dependency factories, so the cache never outlives a
+    request.
     """
 
     def __init__(self, geocoder: Geocoder) -> None:
         self._geocoder = geocoder
+        self._cache: dict[str, LocationResult] = {}
 
     def geocode(self, raw_location: str | None) -> LocationResult:
         if raw_location is None or not raw_location.strip():
@@ -37,6 +45,15 @@ class LocationService:
             )
 
         raw = raw_location.strip()
+        cached = self._cache.get(raw)
+        if cached is not None:
+            return cached
+
+        result = self._resolve(raw)
+        self._cache[raw] = result
+        return result
+
+    def _resolve(self, raw: str) -> LocationResult:
         try:
             matches = self._geocoder.geocode(raw)
         except location_errors.LocationError:

@@ -18,7 +18,3 @@ class VerificationRepository(ABC):
     @abstractmethod
     def get_all(self) -> list[VerificationRecord]:
         """Return all stored verification records."""
-
-    @abstractmethod
-    def get_by_report(self, report_id: str) -> list[VerificationRecord]:
-        """Return verification records for a single report, oldest first."""

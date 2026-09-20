@@ -4,9 +4,11 @@ Layers: HTTP -> map router -> validated MapQuery -> MapService ->
 SearchService (shared Phase 10 filters) + LocationService (geoprojection) ->
 ReportRepository (in-memory today, PostgreSQL later).
 
-The map reuses Phase 10 filtering via SearchService.filtered_reports so the
-time/need/priority/verification/incident/source/bbox rules have exactly one
-implementation. This service only adds the geographic projection:
+The map reuses Phase 10 filtering and priority scoring via
+SearchService.filtered_reports_with_priorities so the time/need/priority/
+verification/incident/source/bbox rules have exactly one implementation and
+priority is computed once per request. This service only adds the geographic
+projection:
 
 - a report appears as a point ONLY when its location resolves to a CONFIRMED
   geocode with in-range coordinates that are NOT the 0,0 "null island"
@@ -17,6 +19,7 @@ implementation. This service only adds the geographic projection:
 - no reporter identity, raw text or evidence is exposed.
 """
 
+from app.location.projection import resolve_confirmed_point
 from app.location.schemas import LocationStatus
 from app.location.service import LocationService
 from app.map.schemas import (
@@ -28,22 +31,6 @@ from app.map.schemas import (
 )
 from app.models.report import Report
 from app.search.service import SearchService
-
-NULL_ISLAND_LATITUDE = 0.0
-NULL_ISLAND_LONGITUDE = 0.0
-
-
-def is_null_island(latitude: float | None, longitude: float | None) -> bool:
-    """True when the coordinates are the 0,0 fallback.
-
-    0,0 points to a real location in the Gulf of Guinea and is commonly used
-    as a "missing value" placeholder; it must never be rendered as a genuine
-    report location.
-    """
-    return (
-        latitude == NULL_ISLAND_LATITUDE
-        and longitude == NULL_ISLAND_LONGITUDE
-    )
 
 
 class MapService:
@@ -61,12 +48,13 @@ class MapService:
         """Return the mappable reports matching ``query``.
 
         Filtering is delegated to the shared Phase 10 service (same rules as
-        /api/search/reports). Every matching report is then geocoded for
-        projection; only reports with CONFIRMED, in-range, non-zero
-        coordinates become points.
+        /api/search/reports, with priority computed exactly once). Every
+        matching report is then geocoded for projection; only reports with
+        CONFIRMED, in-range, non-zero coordinates become points.
         """
-        matched = self._search_service.filtered_reports(query.to_search_query())
-        priorities = self._search_service.report_priorities(matched)
+        matched, priorities = self._search_service.filtered_reports_with_priorities(
+            query.to_search_query()
+        )
         items = [self._project(report, priorities.get(report.id)) for report in matched]
         items = [item for item in items if item is not None]
         ordered = self._sort(items, query)
@@ -78,25 +66,18 @@ class MapService:
         priority,
     ) -> MapReportItem | None:
         """Build a map point for a report, or None if it is not mappable."""
-        if report.location is None or not report.location.strip():
+        point = resolve_confirmed_point(report.location, self._location_service)
+        if point is None:
             return None
-        result = self._location_service.geocode(report.location)
-        if (
-            result.status != LocationStatus.CONFIRMED
-            or result.latitude is None
-            or result.longitude is None
-        ):
-            return None
-        if is_null_island(result.latitude, result.longitude):
-            return None
+        lat, lng, confidence = point
         return MapReportItem(
             report_id=report.id,
-            latitude=result.latitude,
-            longitude=result.longitude,
+            latitude=lat,
+            longitude=lng,
             # Preserve the Phase 5 status when the report carries one;
-            # otherwise the resolved geocode (always CONFIRMED here) applies.
-            location_status=report.location_status or result.status,
-            location_confidence=result.confidence,
+            # otherwise fall back to CONFIRMED (resolve_confirmed_point guarantees it).
+            location_status=report.location_status or LocationStatus.CONFIRMED,
+            location_confidence=confidence,
             timestamp=report.timestamp,
             incident=report.incident,
             needs=list(report.needs),
@@ -122,4 +103,4 @@ class MapService:
         return sorted(items, key=key, reverse=descending)
 
 
-__all__ = ["MapService", "is_null_island"]
+__all__ = ["MapService"]

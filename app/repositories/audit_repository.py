@@ -18,7 +18,3 @@ class AuditRepository(ABC):
     @abstractmethod
     def get_all(self) -> list[AuditRecord]:
         """Return all stored audit records."""
-
-    @abstractmethod
-    def get_by_report(self, report_id: str) -> list[AuditRecord]:
-        """Return audit records for a single report, oldest first."""

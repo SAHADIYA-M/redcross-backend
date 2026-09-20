@@ -41,6 +41,14 @@ class UserNotFoundError(Exception):
         super().__init__(f"User '{user_id}' not found")
 
 
+class SelfModificationError(Exception):
+    """Raised when an admin attempts to deactivate or demote themselves."""
+
+
+class FinalAdminLockoutError(Exception):
+    """Raised when an action would leave the system with no active admins."""
+
+
 class InvalidCredentialsError(Exception):
     """Raised when a login attempt does not match any active account.
 
@@ -109,7 +117,7 @@ class AuthService:
     def list_users(self) -> list[User]:
         return self._repository.list_users()
 
-    def update_user(self, user_id: str, data: UserUpdate) -> User:
+    def update_user(self, user_id: str, data: UserUpdate, actor_id: str) -> User:
         """Apply admin-only changes (role assignment, activation, name).
 
         Only the supplied fields change; identity (user_id/username) and the
@@ -118,6 +126,18 @@ class AuthService:
         existing = self._repository.get_by_id(user_id)
         if existing is None:
             raise UserNotFoundError(user_id)
+            
+        is_modifying_role = data.role is not None and data.role != existing.role
+        is_deactivating = data.is_active is False and existing.is_active is True
+        
+        if (is_modifying_role or is_deactivating) and user_id == actor_id:
+            raise SelfModificationError("Administrators cannot downgrade or deactivate themselves")
+            
+        if existing.role == UserRole.ADMIN and (is_modifying_role or is_deactivating):
+            admins = [u for u in self.list_users() if u.role == UserRole.ADMIN and u.is_active]
+            if len(admins) <= 1:
+                raise FinalAdminLockoutError("Cannot modify or deactivate the final active administrator")
+
         updated = User(
             user_id=existing.user_id,
             username=existing.username,

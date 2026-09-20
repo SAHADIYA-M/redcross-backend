@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.ai.classification import NeedClassifier
-from app.ai.errors import AIGatewayError, AIResponseError
+from app.ai.errors import AIGatewayError
 from app.ai.schemas import AIExtraction, NeedCategory
 from app.ai.validation import AIValidator
 from app.api.ai import get_ai_service

@@ -11,8 +11,6 @@ When PostgreSQL lands, this file keeps working unchanged and the repository
 can translate the same SearchQuery into efficient database filters.
 """
 
-from datetime import datetime, timezone
-
 from app.location.schemas import LocationStatus
 from app.location.service import LocationService
 from app.models.report import Report
@@ -24,6 +22,8 @@ from app.services.priority_service import (
     InsufficientPriorityDataError,
     PriorityService,
 )
+from app.utils.datetime_utils import as_utc
+from app.utils.strings import contains_ci
 
 
 class LocationSearchUnavailableError(Exception):
@@ -34,23 +34,6 @@ class LocationSearchUnavailableError(Exception):
             "Bounding-box search requires a configured location service"
         )
 
-
-def _as_utc(value: datetime) -> datetime:
-    """Normalize a datetime for comparison without shifting its meaning.
-
-    Aware values are converted to UTC preserving the instant; naive values are
-    treated as UTC (the API's convention) rather than being guessed to be
-    local time.
-    """
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
-def _contains_ci(haystack: str | None, needle: str) -> bool:
-    if haystack is None:
-        return False
-    return needle.casefold() in haystack.casefold()
 
 
 class SearchService:
@@ -74,14 +57,15 @@ class SearchService:
     def search(self, query: SearchQuery) -> SearchResponse:
         """Run the query and return a paged, sorted result set.
 
-        Priority is computed once per report for output and sorting (and
-        cached) through the Phase 8 service; reports without usable priority
-        input carry None/None and are handled as "unknown" everywhere - they
-        are excluded only when a priority filter explicitly requires a value,
-        and they sort last rather than as LOW.
+        Priority is computed once per report (and only for reports that can
+        carry a priority) through the Phase 8 service, then reused for
+        filtering, sorting and output - a score is never calculated twice
+        within a single request. Reports without usable priority input carry
+        None/None and are handled as "unknown" everywhere - they are excluded
+        only when a priority filter explicitly requires a value, and they sort
+        last rather than as LOW.
         """
-        candidates = self.filtered_reports(query)
-        priorities = self._priority_map(candidates)
+        candidates, priorities = self.filtered_reports_with_priorities(query)
         ordered = self._sort(candidates, query, priorities)
 
         total = len(ordered)
@@ -94,12 +78,16 @@ class SearchService:
             page_size=query.page_size,
         )
 
-    def filtered_reports(self, query: SearchQuery) -> list[Report]:
-        """Return the reports matching every filter in ``query`` (no paging).
+    def filtered_reports_with_priorities(
+        self, query: SearchQuery
+    ) -> tuple[list[Report], dict[str, PriorityResponse | None]]:
+        """Return reports matching ``query`` plus their priorities.
 
-        Shared by /api/search/reports (which sorts and pages the result) and
-        the Phase 11 map endpoint (which projects the matches onto
-        coordinates), so filter behaviour is implemented exactly once.
+        Non-priority filters are applied first, then priority scores are
+        computed exactly once for the reduced candidate set and reused by the
+        priority filter, sorting and output. Shared by /api/search/reports and
+        the Phase 11 map endpoint so filter behaviour and priority scoring are
+        implemented exactly once and never duplicated within one request.
         """
         # A bounding-box search needs a working geocoder; fail fast rather
         # than silently returning empty results when it is not configured.
@@ -107,29 +95,23 @@ class SearchService:
             raise LocationSearchUnavailableError()
 
         reports = self._repository.get_all()
-        priorities = self._priority_map(reports)
-        return [
-            report
-            for report in reports
-            if self._matches(report, query) and self._matches_priority(report.id, query, priorities)
+        candidates = [
+            report for report in reports if self._matches(report, query)
         ]
-
-    def report_priorities(
-        self, reports: list[Report]
-    ) -> dict[str, PriorityResponse | None]:
-        """Map each report id to its backend-computed priority (None when unknown).
-
-        Exposed so feature layers share the exact same priority calculation
-        and caching rules as the search endpoint. Deterministic: the stored
-        reports never change during a call, so repeated calls agree.
-        """
-        return self._priority_map(reports)
+        priorities = self._priority_map(candidates)
+        if self._has_priority_filter(query):
+            candidates = [
+                report
+                for report in candidates
+                if self._matches_priority(report.id, query, priorities)
+            ]
+        return candidates, priorities
 
     # ------------------------------------------------------------- filtering
 
     def _matches(self, report: Report, query: SearchQuery) -> bool:
         """Apply every non-priority filter; all conditions must hold (AND)."""
-        if query.q is not None and not _contains_ci(report.original_text, query.q):
+        if query.q is not None and not contains_ci(report.original_text, query.q):
             return False
         if query.need and not any(need in report.needs for need in query.need):
             return False
@@ -140,16 +122,16 @@ class SearchService:
             return False
         if query.status is not None and report.status != query.status:
             return False
-        if query.location is not None and not _contains_ci(report.location, query.location):
+        if query.location is not None and not contains_ci(report.location, query.location):
             return False
         if (
             query.location_status is not None
             and report.location_status != query.location_status
         ):
             return False
-        if query.incident is not None and not _contains_ci(report.incident, query.incident):
+        if query.incident is not None and not contains_ci(report.incident, query.incident):
             return False
-        if query.source is not None and not _contains_ci(report.source, query.source):
+        if query.source is not None and not contains_ci(report.source, query.source):
             return False
         if not self._matches_time(report, query):
             return False
@@ -160,10 +142,10 @@ class SearchService:
     def _matches_time(self, report: Report, query: SearchQuery) -> bool:
         if query.start_time is None and query.end_time is None:
             return True
-        timestamp = _as_utc(report.timestamp)
-        if query.start_time is not None and timestamp < _as_utc(query.start_time):
+        timestamp = as_utc(report.timestamp)
+        if query.start_time is not None and timestamp < as_utc(query.start_time):
             return False
-        if query.end_time is not None and timestamp > _as_utc(query.end_time):
+        if query.end_time is not None and timestamp > as_utc(query.end_time):
             return False
         return True
 
@@ -194,7 +176,7 @@ class SearchService:
         priorities: dict[str, PriorityResponse | None],
     ) -> bool:
         """Apply priority filters; reports with unknown priority never match."""
-        if query.priority is None and query.min_priority_score is None and query.max_priority_score is None:
+        if not self._has_priority_filter(query):
             return True
         priority = priorities.get(report_id)
         if priority is None:
@@ -229,7 +211,7 @@ class SearchService:
         descending = query.sort_order == SearchSortOrder.DESC
 
         if query.sort_by == SearchSortField.TIMESTAMP:
-            primary = lambda r: _as_utc(r.timestamp)  # noqa: E731
+            primary = lambda r: as_utc(r.timestamp)  # noqa: E731
         elif query.sort_by == SearchSortField.PRIORITY:
             primary = lambda r: (
                 priorities.get(r.id).final_score
@@ -278,18 +260,16 @@ class SearchService:
         return {
             report.id: self._calculate(report.id)
             for report in reports
-            if self._may_need_priority(report)
+            if report.has_priority_signal
         }
 
     @staticmethod
-    def _may_need_priority(report: Report) -> bool:
-        """Skip calculation for reports that can never carry priority data."""
-        return bool(
-            report.severity is not None
-            or report.affected_population is not None
-            or report.vulnerability
-            or report.time_sensitivity
-            or report.evidence
+    def _has_priority_filter(query: SearchQuery) -> bool:
+        """True when the query needs priority values for filtering."""
+        return (
+            query.priority is not None
+            or query.min_priority_score is not None
+            or query.max_priority_score is not None
         )
 
     def _calculate(self, report_id: str) -> PriorityResponse | None:

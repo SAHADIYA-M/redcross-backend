@@ -13,6 +13,7 @@ from app.api.map import get_information_gap_service, get_map_service
 from app.api.priority import get_priority_service
 from app.api.reports import get_report_service
 from app.api.verification import get_audit_repository, get_verification_service
+from app.location.projection import is_null_island
 from app.location.providers import StubGeocoder
 from app.location.schemas import GeocodeMatch
 from app.location.service import LocationService
@@ -24,7 +25,7 @@ from app.repositories.in_memory_verification_repository import (
 )
 from app.search.service import SearchService
 from app.services.information_gap_service import InformationGapService
-from app.services.map_service import MapService, is_null_island
+from app.services.map_service import MapService
 from app.services.priority_service import PriorityService
 from app.services.report_service import ReportService
 from app.verification.service import VerificationService

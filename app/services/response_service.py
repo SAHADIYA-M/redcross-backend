@@ -34,6 +34,8 @@ from app.response_activity.schemas import (
     UpdateResponse,
 )
 from app.services.report_service import ReportNotFoundError
+from app.utils.datetime_utils import as_utc
+from app.utils.strings import contains_ci
 
 
 class ResponseNotFoundError(Exception):
@@ -81,7 +83,7 @@ class ResponseService:
             need=data.need,
             activity=data.activity.strip(),
             response_status=data.response_status,
-            timestamp=data.timestamp or now,
+            timestamp=as_utc(data.timestamp) if data.timestamp else now,
             location=data.location,
             source=data.source,
             notes=data.notes,
@@ -100,11 +102,11 @@ class ResponseService:
         """Return activities matching every filter, newest first."""
         activities = self._response_repository.get_all()
         activities = [
-            a for a in activities if self._matches(a, query)
+            a for a in activities if matches_response_activity(a, query)
         ]
         return sorted(
             activities,
-            key=lambda a: (_as_utc(a.timestamp), a.response_id),
+            key=lambda a: (as_utc(a.timestamp), a.response_id),
             reverse=True,
         )
 
@@ -155,27 +157,6 @@ class ResponseService:
 
     # ------------------------------------------------------------------ priv
 
-    @staticmethod
-    def _matches(activity: ResponseActivity, query: ResponseQuery) -> bool:
-        if query.report_id is not None and activity.report_id != query.report_id:
-            return False
-        if query.need is not None and activity.need != query.need:
-            return False
-        if (
-            query.response_status is not None
-            and activity.response_status != query.response_status
-        ):
-            return False
-        if query.source is not None and not _contains_ci(
-            activity.source, query.source
-        ):
-            return False
-        if query.location is not None and not _contains_ci(
-            activity.location, query.location
-        ):
-            return False
-        return _matches_time(activity.timestamp, query.start_time, query.end_time)
-
     def _require_report(self, report_id: str) -> Report:
         report = self._report_repository.get_by_id(report_id)
         if report is None:
@@ -204,27 +185,43 @@ class ResponseService:
         self._audit_repository.create(record)
 
 
-def _as_utc(value: datetime) -> datetime:
-    """Normalize a datetime for comparison without shifting its meaning."""
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
-def _contains_ci(haystack: str | None, needle: str) -> bool:
-    if haystack is None:
-        return False
-    return needle.casefold() in haystack.casefold()
-
-
 def _matches_time(
     timestamp: datetime,
     start_time: datetime | None,
     end_time: datetime | None,
 ) -> bool:
-    value = _as_utc(timestamp)
-    if start_time is not None and value < _as_utc(start_time):
+    value = as_utc(timestamp)
+    if start_time is not None and value < as_utc(start_time):
         return False
-    if end_time is not None and value > _as_utc(end_time):
+    if end_time is not None and value > as_utc(end_time):
         return False
     return True
+
+
+def matches_response_activity(
+    activity: ResponseActivity, query: ResponseQuery
+) -> bool:
+    """AND-filter a response activity against a ResponseQuery.
+
+    Single implementation shared by the responses list and its map projection
+    (which converts its own query to a ResponseQuery), so report_id, need,
+    status, source, location and time filters never diverge.
+    """
+    if query.report_id is not None and activity.report_id != query.report_id:
+        return False
+    if query.need is not None and activity.need != query.need:
+        return False
+    if (
+        query.response_status is not None
+        and activity.response_status != query.response_status
+    ):
+        return False
+    if query.source is not None and not contains_ci(
+        activity.source, query.source
+    ):
+        return False
+    if query.location is not None and not contains_ci(
+        activity.location, query.location
+    ):
+        return False
+    return _matches_time(activity.timestamp, query.start_time, query.end_time)

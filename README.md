@@ -1,8 +1,5 @@
 # Backend — Operational Picture (Humanitarian Needs Assessment MVP)
 
-> **Status: TEMPORARY / SCAFFOLD README**
-> Placeholder for the backend service/repo, written before the research document and final tech stack are confirmed. Update once those are finalized — especially Tech Stack, Environment Variables, DB Schema, and API Endpoints.
-
 ---
 
 ## 1. What This Service Does
@@ -20,124 +17,216 @@ AI outputs here are always **drafts pending human review** — the backend must 
 
 ---
 
-## 2. Tech Stack *(placeholder — pending confirmation)*
+## 2. Current Implementation Status
 
-| Component | Choice (tentative) |
-|---|---|
-| Language/framework | TBD |
-| Database | PostgreSQL (+ PostGIS for geospatial queries) |
-| ORM/migrations | TBD |
-| Auth | TBD |
-| AI provider/SDK | TBD |
-| Geocoding | OpenStreetMap/Nominatim (tentative) |
-| File/photo storage | TBD |
-| Testing | TBD |
-| Hosting | TBD |
+**Current repository:**
+- The backend is currently implemented using in-memory repositories.
+- PostgreSQL is NOT connected.
+- The backend is currently database-independent through repository interfaces.
+- Alembic migrations are NOT currently present.
 
----
-
-## 3. Project Structure *(placeholder — to confirm once framework is chosen)*
-
-```
-backend/
-├── src/
-│   ├── routes/           # REST API endpoints
-│   ├── controllers/
-│   ├── services/
-│   │   ├── ai/           # extraction, classification, severity, duplicate/conflict, priority
-│   │   ├── geocoding/
-│   │   └── audit/
-│   ├── models/            # DB models/schema
-│   ├── middleware/         # auth, validation, error handling
-│   └── config/
-├── tests/
-├── migrations/
-├── .env.example
-├── README.md              # this file
-└── package.json / requirements.txt / etc.
-```
+**Future / Planned:**
+- PostgreSQL repository implementations.
+- Database schema/migrations.
+- Query optimization.
+- Transaction boundaries.
+- Relational schema decisions.
 
 ---
 
-## 4. Environment Variables *(placeholder)*
+## 3. Tech Stack
 
-All secrets via environment variables — never hardcoded. Example `.env.example` to be created once stack is finalized:
+- **Language/Framework**: Python, FastAPI, Pydantic, Uvicorn
+- **Database**: In-memory repositories (PostgreSQL planned for future)
+- **Auth**: JWT authentication, bcrypt for password hashing
+- **AI Provider**: Google Gemini (via `google-genai` package)
+- **Testing**: pytest
+
+---
+
+## 4. Architecture
+
+The architecture currently follows a layered approach:
+```
+FastAPI
+    ↓
+API Routers
+    ↓
+Services
+    ↓
+Repository Interfaces
+    ↓
+In-Memory Repository Implementations
+```
+- **FastAPI / API Routers**: Handle HTTP requests, input validation, and routing.
+- **Services**: Contain the core business logic, orchestrating AI calls and data operations.
+- **Repository Interfaces**: Define the data access contracts.
+- **In-Memory Repository Implementations**: Provide the current volatile data storage for development and testing.
+
+---
+
+## 5. Project Structure
 
 ```
-DATABASE_URL=
-AI_API_KEY=
-GEOCODING_API_KEY=      # if needed
-STORAGE_BUCKET=
-JWT_SECRET=
+app/
+├── ai/
+├── api/
+├── audit/
+├── conflicts/
+├── core/
+├── duplicates/
+├── information_gap/
+├── location/
+├── map/
+├── models/
+├── priority/
+├── repositories/
+├── response_activity/
+├── schemas/
+├── search/
+├── services/
+├── utils/
+└── verification/
+
+tests/
 ```
 
 ---
 
-## 5. Database Schema *(placeholder — draft after research doc review)*
+## 6. Features
 
-Core entities expected (subject to change):
-
-- **reports** — raw field report (text, location, media, timestamp, submitter, source)
-- **extractions** — AI-extracted structured data per report (people, needs, places, facilities, time, severity), linked to source report, with confidence scores
-- **needs** — classified need entries (fixed category, location, severity, status)
-- **locations** — resolved/geocoded locations, with human-correction history
-- **duplicates_conflicts** — links between reports flagged as duplicate or conflicting
-- **priority_scores** — computed priority per need/area, with explainable rationale
-- **verifications** — human review/edit/approval actions, linked to user + timestamp
-- **information_gaps** — flagged areas/topics with no or stale data
-- **audit_log** — who changed what, when, across all entities
-
-Every table involving a "finding" must retain: source, timestamp, location, confidence, verification status, and a reference to original evidence.
+The currently implemented functionality includes:
+- Report management
+- AI analysis/extraction
+- Locations & geocoding
+- Priority scoring
+- Duplicate and conflict detection
+- Verification workflow
+- Response activities and response coverage
+- Map functionality and information gaps
+- Search capabilities
+- Audit logging
+- Authentication (JWT), authorization, user/admin management
 
 ---
 
-## 6. API Endpoints *(placeholder — to expand into full spec)*
+## 7. API Endpoints
 
 | Method | Endpoint | Purpose |
 |---|---|---|
 | POST | `/api/reports` | Submit a new field report |
 | GET | `/api/reports` | List/search/filter reports |
-| GET | `/api/reports/:id` | Get single report + linked extraction/evidence |
-| POST | `/api/reports/:id/extract` | Run AI extraction on a report |
-| GET | `/api/needs` | List classified needs (filterable by location, category, status, confidence) |
-| PATCH | `/api/needs/:id/verify` | Human verify/edit/approve a need entry |
-| GET | `/api/duplicates` | List flagged duplicate/conflicting report groups |
-| GET | `/api/priority` | Get current priority rankings with rationale |
-| GET | `/api/locations/:id/correct` | Human correction of ambiguous geocoding |
-| GET | `/api/gaps` | List detected information gaps |
+| GET | `/api/reports/{report_id}` | Get single report |
+| PATCH | `/api/reports/{report_id}` | Update a report |
+| POST | `/api/reports/{report_id}/priority` | Calculate priority for a report |
+| POST | `/api/reports/{report_id}/duplicates` | Detect duplicates |
+| POST | `/api/reports/{report_id}/conflicts` | Detect conflicts |
+| PATCH | `/api/reports/{report_id}/verify` | Human verify/edit/approve a report (Auth: REVIEWER/ADMIN) |
+| POST | `/api/reports/{report_id}/request-assessment` | Request assessment for a report (Auth: REVIEWER/ADMIN) |
+| GET | `/api/verification` | List verification records |
+| POST | `/api/ai/analyze` | Run AI extraction on text |
+| GET | `/api/analytics/response-coverage` | Get response coverage analytics |
 | GET | `/api/audit` | Audit trail query |
+| POST | `/api/auth/register` | Public registration |
+| POST | `/api/auth/login` | Obtain JWT token |
+| GET | `/api/auth/me` | Get current user profile |
+| POST | `/api/locations/geocode` | Geocode a location |
+| GET | `/api/map/reports` | Map data for reports |
+| GET | `/api/map/information-gaps` | List detected information gaps |
+| GET | `/api/map/responses` | Map data for response activities |
+| POST | `/api/responses` | Record response activity |
+| GET | `/api/responses` | List response activities |
+| GET | `/api/responses/{response_id}` | Get single response activity |
+| PATCH | `/api/responses/{response_id}` | Update a response activity |
+| GET | `/api/search/reports` | Search reports |
+| GET | `/api/users` | List users |
+| PATCH | `/api/users/{user_id}` | Update a user |
 
 ---
 
-## 7. AI Pipeline Modules *(placeholder — prompts live in `src/services/ai/`)*
+## 8. Authentication
 
-1. Information extraction
-2. Need classification (fixed categories)
-3. Severity assessment
-4. Duplicate detection
-5. Conflict detection
-6. Priority recommendation (transparent rationale, not a black box)
-7. Summarization / search assistance
-
-**Hard rule:** AI must never hallucinate or invent missing information. Every module preserves uncertainty (confidence scores, explicit "unknown" fields) and returns source report references for every claim.
+The system uses JWT (JSON Web Tokens) for authentication and role-based access control. Password hashing is done with bcrypt.
+- **Public Registration**: Available with a default role configured by `PUBLIC_REGISTER_ROLE`.
+- **Role Restrictions**: `PUBLIC_REGISTER_ROLE` cannot be ADMIN.
+- **Admin Management**: Supports a development-only seed admin (enabled via `SEED_DEV_ADMIN` in non-production environments).
+- **Production**: A secure, long `JWT_SECRET_KEY` is required in production environments.
 
 ---
 
-## 8. Working Rules for Implementation
+## 9. AI Integration
 
-For every coding change/milestone in this repo:
-1. Inspect existing code first
-2. Avoid rewriting working code
-3. Keep dependencies minimal
-4. Use environment variables for secrets
-5. Test the feature
-6. Fix errors
-7. Explain changed files and run commands
-8. Work only on the requested milestone
+AI output is handled through the backend workflow, relying on Google Gemini. Outputs are drafts pending human review.
+Configured via:
+- `GEMINI_API_KEY`: API key for Gemini.
+- `GEMINI_MODEL`: Model identifier (e.g., `gemini-2.5-flash`).
+- `AI_MAX_RETRIES`: Number of additional attempts for transient failures (must not be negative).
+- `AI_RETRY_BACKOFF_SECONDS`: Delay between retries.
 
 ---
 
-## 9. Priority Calculation (Phase 8)
+## 10. Geocoding
+
+Geocoding is handled via the configured `GEOCODER_PROVIDER` (e.g., `"stub"` for local development offline mode).
+
+---
+
+## 11. Environment Variables
+
+Configure the system by creating a `.env` file based on `.env.example`. Do not commit real secrets.
+
+- `APP_NAME`: Name of the application.
+- `APP_VERSION`: Current version.
+- `ENVIRONMENT`: e.g., `development` or `production`.
+- `CORS_ORIGINS`: Comma-separated allowed origins (Production CORS cannot use wildcard `*`).
+- `GEMINI_API_KEY`: API Key for Google Gemini.
+- `GEMINI_MODEL`: Target Gemini model.
+- `AI_MAX_RETRIES`: Max retries for AI.
+- `AI_RETRY_BACKOFF_SECONDS`: Backoff for AI retries.
+- `GEOCODER_PROVIDER`: Target geocoding provider.
+- `JWT_SECRET_KEY`: Secret for JWT signing (Required in production).
+- `JWT_ALGORITHM`: Hashing algorithm for JWT.
+- `ACCESS_TOKEN_EXPIRE_MINUTES`: Expiry time for tokens.
+- `PUBLIC_REGISTER_ROLE`: Default role for open registration.
+- `SEED_DEV_ADMIN`: Whether to seed a dev admin on startup.
+- `DEV_ADMIN_USERNAME`: Dev admin username.
+- `DEV_ADMIN_PASSWORD`: Dev admin password.
+
+---
+
+## 12. Setup
+
+Ensure you have Python 3.10+ installed.
+
+1. Create and activate a virtual environment:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Copy `.env.example` to `.env` and adjust the variables.
+4. Run the application:
+   ```bash
+   uvicorn app.main:app --reload
+   ```
+
+---
+
+## 13. Testing
+
+Testing is handled via `pytest`. The test suite currently validates the in-memory backend logic.
+Run the tests using:
+```bash
+pytest
+```
+Currently, the verified test suite has **430 passing tests**.
+
+---
+
+## 14. Priority Calculation (Phase 8)
 
 The final priority is **computed by the backend**, never by the AI. Gemini
 only extracts claims (severity, affected population, vulnerability, time
@@ -176,16 +265,3 @@ Boundaries are inclusive on the lower side (≥).
   instead of a fabricated score.
 
 Endpoint: `POST /api/reports/{report_id}/priority` (see `app/services/priority_service.py`).
-
----
-
-## 10. Open Items / Next Steps
-
-- [ ] Confirm tech stack (framework, ORM, hosting)
-- [ ] Finalize DB schema + write migrations
-- [ ] Write full API spec
-- [ ] Implement AI pipeline modules + prompts
-- [ ] Set up geocoding service
-- [ ] Build synthetic test dataset
-- [ ] Set up basic auth
-- [ ] Set up audit logging

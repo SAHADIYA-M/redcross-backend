@@ -49,7 +49,7 @@ def auth_setup():
     seeded repository, so request authentication, API registration and API
     login all operate on exactly the same in-memory data as the seeded users.
     """
-    from app.api.deps import get_auth_service, get_user_repository
+    from app.api.deps import get_auth_service
     from app.main import app
 
     setup = make_auth_setup()

@@ -3,24 +3,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_current_active_user
-from app.api.reports import get_report_repository
-from app.duplicates.service import DuplicateDetectionService
+from app.core.container import get_duplicate_service
 from app.models.user import User
-from app.repositories.report_repository import ReportRepository
 from app.schemas.duplicate import DuplicateDetectionResponse
 from app.services.report_service import ReportNotFoundError
 
 router = APIRouter(prefix="/api/reports", tags=["duplicates"])
-
-
-def get_duplicate_service() -> DuplicateDetectionService:
-    """Return the duplicate-detection service.
-
-    It reuses the reports repository so duplicate detection sees exactly the
-    reports created via the reports API. Storage is swapped in
-    get_report_repository without changing this router.
-    """
-    return DuplicateDetectionService(get_report_repository())
 
 
 @router.post("/{report_id}/duplicates", response_model=DuplicateDetectionResponse)

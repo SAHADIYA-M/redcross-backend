@@ -14,3 +14,6 @@ venv/
 .vscode/
 .idea/
 .DS_Store
+
+# Testing
+.pytest_cache/

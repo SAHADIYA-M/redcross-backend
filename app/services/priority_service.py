@@ -35,7 +35,6 @@ Missing/unknown data handling (documented, deterministic):
 import re
 
 from app.ai.schemas import SeverityLevel
-from app.models.report import Report
 from app.priority.schemas import PriorityLevel, PriorityResult
 from app.repositories.report_repository import ReportRepository
 from app.schemas.priority import PriorityResponse
@@ -73,9 +72,9 @@ _TIME_BANDS: tuple[tuple[float, tuple[str, ...]], ...] = (
         ("critical", "immediate", "emergency", "life-threatening", "now", "today"),
     ),
     (85.0, ("24 hour", "24 hours", "24hr", "within 24", "tomorrow")),
-    (20.0, ("not urgent", "routine", "low priority", "month", "months")),
     (70.0, ("urgent", "48", "72", "soon", "hour", "hours")),
     (40.0, ("days", "week", "weeks")),
+    (20.0, ("not urgent", "routine", "low priority", "month", "months")),
 )
 
 
@@ -212,7 +211,8 @@ def time_sensitivity_factor_score(text: str | None) -> tuple[float, str]:
     haystack = text.lower()
     for score, keywords in _TIME_BANDS:
         for keyword in keywords:
-            if re.search(rf"\b{re.escape(keyword)}\b", haystack):
+            pattern = rf"(?<!not\s)\b{re.escape(keyword)}\b" if keyword == "urgent" else rf"\b{re.escape(keyword)}\b"
+            if re.search(pattern, haystack):
                 return (
                     score,
                     f"time sensitivity '{text}' matched keyword '{keyword}'",
@@ -257,16 +257,6 @@ def evidence_verification_factor_score(evidence: list[str]) -> tuple[float, str]
     )
 
 
-def _has_any_signal(report: Report) -> bool:
-    return (
-        report.severity is not None
-        or report.affected_population is not None
-        or bool(report.vulnerability)
-        or bool(report.time_sensitivity)
-        or bool(report.evidence)
-    )
-
-
 class PriorityService:
     """Computes deterministic backend priority for a report.
 
@@ -281,7 +271,7 @@ class PriorityService:
         report = self._repository.get_by_id(report_id)
         if report is None:
             raise ReportNotFoundError(report_id)
-        if not _has_any_signal(report):
+        if not report.has_priority_signal:
             raise InsufficientPriorityDataError(report_id)
 
         severity_score, severity_reason = severity_factor_score(report.severity)

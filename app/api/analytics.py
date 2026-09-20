@@ -13,9 +13,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_current_active_user
-from app.api.priority import get_priority_service
-from app.api.responses import get_response_repository
-from app.api.reports import get_report_repository
+from app.core.container import (
+    get_priority_service,
+    get_report_repository,
+    get_response_repository,
+)
 from app.models.user import User
 from app.response_activity.schemas import (
     CoverageQuery,

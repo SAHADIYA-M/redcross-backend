@@ -60,3 +60,20 @@ class Report(BaseModel):
             "never touches it."
         ),
     )
+
+    @property
+    def has_priority_signal(self) -> bool:
+        """True when any structured field could feed the backend priority.
+
+        Single source of truth for "is this report worth attempting a priority
+        calculation" — used by both the priority service (which refuses to
+        calculate without a signal) and the search/filter layer (which skips
+        calculation for reports that can never carry one).
+        """
+        return bool(
+            self.severity is not None
+            or self.affected_population is not None
+            or self.vulnerability
+            or self.time_sensitivity
+            or self.evidence
+        )

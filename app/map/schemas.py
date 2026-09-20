@@ -17,7 +17,7 @@ coordinates that are NOT the 0,0 "null island" fallback; reports without
 coordinates, or marked UNCERTAIN, are never silently placed anywhere.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
@@ -28,14 +28,8 @@ from app.models.report import ReportStatus
 from app.priority.schemas import PriorityLevel
 from app.response_activity.schemas import ResponseStatus
 from app.search.schemas import MAX_PAGE_SIZE, SearchQuery
+from app.utils.validators import validate_time_range
 from app.verification.schemas import VerificationStatus
-
-
-def _as_utc(value: datetime) -> datetime:
-    """Normalize a datetime for comparison without shifting its meaning."""
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
 
 
 class MapSortField(str, Enum):
@@ -236,12 +230,7 @@ class ResponseMapQuery(BaseModel):
 
     @model_validator(mode="after")
     def _validate_time_range(self) -> "ResponseMapQuery":
-        if (
-            self.start_time is not None
-            and self.end_time is not None
-            and _as_utc(self.start_time) > _as_utc(self.end_time)
-        ):
-            raise ValueError("start_time must be <= end_time")
+        validate_time_range(self.start_time, self.end_time)
         return self
 
 

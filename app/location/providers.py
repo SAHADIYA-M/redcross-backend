@@ -49,7 +49,9 @@ class StubGeocoder:
         return matches
 
 
-def build_geocoder(provider: str) -> object:
+from app.location.geocoder import Geocoder
+
+def build_geocoder(provider: str) -> Geocoder:
     """Factory for the configured geocoding provider.
 
     Only the stub is available in this phase because a real provider needs

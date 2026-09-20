@@ -3,14 +3,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_current_active_user, require_roles
-from app.api.reports import get_report_repository
-from app.models.user import REVIEWER_ROLES, User
-from app.repositories.audit_repository import AuditRepository
-from app.repositories.in_memory_audit_repository import InMemoryAuditRepository
-from app.repositories.in_memory_verification_repository import (
-    InMemoryVerificationRepository,
+from app.core.container import (
+    get_audit_repository,
+    get_verification_service,
 )
-from app.repositories.verification_repository import VerificationRepository
+from app.models.user import REVIEWER_ROLES, User
 from app.schemas.verification import (
     AssessmentRequestResponse,
     RequestAssessmentRequest,
@@ -36,39 +33,7 @@ verification_list_router = APIRouter(
     tags=["verification"],
 )
 
-_verification_repository = InMemoryVerificationRepository()
-_audit_repository = InMemoryAuditRepository()
-
 _reviewer = require_roles(*sorted(REVIEWER_ROLES))
-
-
-def get_verification_repository() -> VerificationRepository:
-    """Return the shared in-memory verification repository.
-
-    A single instance is created once at import time so verification records
-    persist across requests. Swap the storage backend here without touching
-    the routers.
-    """
-    return _verification_repository
-
-
-def get_audit_repository() -> AuditRepository:
-    """Return the shared in-memory audit repository (append-only)."""
-    return _audit_repository
-
-
-def get_verification_service() -> VerificationService:
-    """Build the verification service over the shared repositories.
-
-    The report repository is the same instance used by the reports API, so
-    verification writes are visible everywhere. Storage backends are swapped
-    here (e.g. for a database-backed repository) without changing the router.
-    """
-    return VerificationService(
-        get_report_repository(),
-        get_verification_repository(),
-        get_audit_repository(),
-    )
 
 
 @router.patch("/{report_id}/verify", response_model=VerifyResponse)

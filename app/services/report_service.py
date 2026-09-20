@@ -31,6 +31,8 @@ def _snapshot_extraction(report: Report) -> dict[str, object]:
     }
 
 
+from app.utils.datetime_utils import as_utc
+
 class ReportNotFoundError(Exception):
     """Raised when a report with the requested id does not exist."""
 
@@ -54,7 +56,7 @@ class ReportService:
             id=uuid.uuid4().hex,
             original_text=data.original_text,
             reporter=data.reporter,
-            timestamp=data.timestamp or datetime.now(timezone.utc),
+            timestamp=as_utc(data.timestamp) if data.timestamp else datetime.now(timezone.utc),
             location=data.location,
             incident=data.incident,
             evidence=data.evidence,

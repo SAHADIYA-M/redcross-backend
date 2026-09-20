@@ -16,7 +16,7 @@ Uncertainty rules:
   they compare fairly with the aware datetimes the API stores.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
@@ -25,6 +25,7 @@ from app.ai.schemas import NeedCategory
 from app.location.schemas import LocationStatus
 from app.models.report import ReportStatus
 from app.priority.schemas import PriorityLevel
+from app.utils.validators import validate_bbox, validate_time_range
 from app.verification.schemas import VerificationStatus
 
 DEFAULT_PAGE = 1
@@ -45,18 +46,6 @@ class SearchSortOrder(str, Enum):
 
     ASC = "asc"
     DESC = "desc"
-
-
-def _as_utc(value: datetime) -> datetime:
-    """Normalize a datetime for comparison without shifting its meaning.
-
-    Aware values are converted to UTC preserving the instant. Naive values
-    are treated as UTC (the API's convention) rather than being guessed to be
-    local time.
-    """
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
 
 
 class SearchQuery(BaseModel):
@@ -177,34 +166,21 @@ class SearchQuery(BaseModel):
 
     @model_validator(mode="after")
     def _validate_cross_field_ranges(self) -> "SearchQuery":
-        if (
-            self.start_time is not None
-            and self.end_time is not None
-            and _as_utc(self.start_time) > _as_utc(self.end_time)
-        ):
-            raise ValueError("start_time must be <= end_time")
+        validate_time_range(self.start_time, self.end_time)
         if (
             self.min_priority_score is not None
             and self.max_priority_score is not None
             and self.min_priority_score > self.max_priority_score
         ):
             raise ValueError("min_priority_score must be <= max_priority_score")
-        if self.min_lat is not None and self.max_lat is not None:
-            if self.min_lat > self.max_lat:
-                raise ValueError("min_lat must be <= max_lat")
-        if self.min_lon is not None and self.max_lon is not None:
-            if self.min_lon > self.max_lon:
-                raise ValueError("min_lon must be <= max_lon")
-        bbox_parts = (
+        validate_bbox(
             self.min_lat,
             self.max_lat,
             self.min_lon,
             self.max_lon,
-        )
-        any_bbox = any(part is not None for part in bbox_parts)
-        if any_bbox and not all(part is not None for part in bbox_parts):
-            raise ValueError(
+            missing_message=(
                 "min_lat, max_lat, min_lon and max_lon must all be supplied "
                 "together to define a bounding box"
-            )
+            ),
+        )
         return self

@@ -19,31 +19,12 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.core.container import get_auth_service, get_user_repository
 from app.core.security import TokenError, decode_access_token
 from app.models.user import User, UserRole
-from app.repositories import InMemoryUserRepository
 from app.repositories.user_repository import UserRepository
-from app.services.auth_service import AuthService
 
 _bearer_scheme = HTTPBearer(auto_error=False)
-
-_user_repository = InMemoryUserRepository()
-_auth_service = AuthService(_user_repository)
-
-
-def get_user_repository() -> UserRepository:
-    """Return the shared in-memory user repository.
-
-    A single instance is created once at import time so users persist across
-    requests. Swap the storage backend here (e.g. for a database-backed
-    repository) without touching the routers.
-    """
-    return _user_repository
-
-
-def get_auth_service() -> AuthService:
-    """Return the shared auth service over the shared user repository."""
-    return _auth_service
 
 
 def get_current_user(

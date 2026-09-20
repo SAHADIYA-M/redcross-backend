@@ -17,13 +17,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import get_current_active_user, require_roles
-from app.api.reports import get_report_repository
-from app.api.verification import get_audit_repository
+from app.core.container import get_response_repository, get_response_service
 from app.models.user import RESPONDER_ROLES, User
-from app.repositories.response_repository import ResponseRepository
-from app.repositories.in_memory_response_repository import (
-    InMemoryResponseRepository,
-)
 from app.response_activity.schemas import (
     CreateResponse,
     ResponseActivity,
@@ -34,38 +29,11 @@ from app.services.report_service import ReportNotFoundError
 from app.services.response_service import (
     NoResponseChangeError,
     ResponseNotFoundError,
-    ResponseService,
 )
 
 router = APIRouter(prefix="/api/responses", tags=["responses"])
 
-_response_repository = InMemoryResponseRepository()
-
 _responder = require_roles(*sorted(RESPONDER_ROLES))
-
-
-def get_response_repository() -> ResponseRepository:
-    """Return the shared in-memory response repository.
-
-    A single instance is created once at import time so response activities
-    persist across requests. Swap the storage backend here (e.g. for a
-    database-backed repository) without touching the router.
-    """
-    return _response_repository
-
-
-def get_response_service() -> ResponseService:
-    """Build the response service over the shared repositories.
-
-    Responses, reports and the audit log all share the same instances used by
-    their own APIs, so recorded activities, validated reports and audit
-    entries stay consistent.
-    """
-    return ResponseService(
-        get_response_repository(),
-        get_report_repository(),
-        get_audit_repository(),
-    )
 
 
 @router.post(

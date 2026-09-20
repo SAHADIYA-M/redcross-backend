@@ -9,8 +9,6 @@ The API's responsible-data rules must hold across endpoints:
   zero reports is INSUFFICIENT_INFORMATION, never "no need".
 """
 
-import uuid
-
 from fastapi.testclient import TestClient
 
 
