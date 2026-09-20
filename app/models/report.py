@@ -23,9 +23,12 @@ class Report(BaseModel):
     developed before the real database is available.
 
     Structured fields (severity, affected_population, needs,
-    infrastructure_status, available_needs) hold the AI-validated claims about
-    the report. They are optional: a report that does not provide a claim
-    carries None/empty, which is never treated as a conflict.
+    infrastructure_status, available_needs, vulnerability,
+    time_sensitivity) hold the AI-validated claims about the report. They are
+    optional: a report that does not provide a claim carries None/empty,
+    which is never treated as a conflict. The backend converts these claims
+    into factor scores; neither severity nor any other claim is ever turned
+    into a final priority by the AI.
     """
 
     id: str
@@ -43,3 +46,5 @@ class Report(BaseModel):
     affected_population: int | None = Field(default=None, ge=0)
     infrastructure_status: InfrastructureStatus | None = None
     available_needs: list[NeedCategory] = Field(default_factory=list)
+    vulnerability: list[str] = Field(default_factory=list)
+    time_sensitivity: str | None = None

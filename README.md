@@ -137,7 +137,49 @@ For every coding change/milestone in this repo:
 
 ---
 
-## 9. Open Items / Next Steps
+## 9. Priority Calculation (Phase 8)
+
+The final priority is **computed by the backend**, never by the AI. Gemini
+only extracts claims (severity, affected population, vulnerability, time
+sensitivity, evidence quotes); the backend converts those claims into
+0-100 factor scores, applies the fixed weights and derives the level.
+
+**Formula** (weights total 100%):
+
+```
+final_score =
+    severity_score              * 0.30
+    + affected_population_score * 0.25
+    + vulnerability_score       * 0.20
+    + time_sensitivity_score    * 0.15
+    + evidence_verification_score * 0.10
+```
+
+**Levels:** 85-100 → CRITICAL · 70-84 → HIGH · 40-69 → MEDIUM · 0-39 → LOW.
+Boundaries are inclusive on the lower side (≥).
+
+**Factor mappings (deterministic):**
+
+| Factor | Claim → score |
+|---|---|
+| Severity | CRITICAL→100, HIGH→75, MEDIUM→50, LOW→25 |
+| Affected population | 0→0 · 1-99→25 · 100-499→50 · 500-999→75 · ≥1000→100 |
+| Vulnerability | 0 groups→50 · 1→60 · 2→80 · ≥3→100 |
+| Time sensitivity | keyword bands: critical/immediate→100 · 24h/tomorrow→85 · urgent/48-72h→70 · days/week→40 · not urgent/routine→20 · unrecognized→50 |
+| Evidence/verification | 0 items→10 · 1→40 · 2→50 · ≥3→60 (capped: human verification not implemented) |
+
+**Missing/unknown handling (documented, never invented):**
+- Missing severity, population, vulnerability or time sensitivity → neutral
+  default 50 (absence is "unknown", not an opinion).
+- Missing evidence → weak base 10 (missing evidence is not verification).
+- A report carrying **no** usable claim at all → `422` business error
+  instead of a fabricated score.
+
+Endpoint: `POST /api/reports/{report_id}/priority` (see `app/services/priority_service.py`).
+
+---
+
+## 10. Open Items / Next Steps
 
 - [ ] Confirm tech stack (framework, ORM, hosting)
 - [ ] Finalize DB schema + write migrations

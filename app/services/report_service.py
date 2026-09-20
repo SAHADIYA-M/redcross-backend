@@ -41,6 +41,8 @@ class ReportService:
             affected_population=data.affected_population,
             infrastructure_status=data.infrastructure_status,
             available_needs=data.available_needs,
+            vulnerability=data.vulnerability,
+            time_sensitivity=data.time_sensitivity,
         )
         return self._repository.create(report)
 

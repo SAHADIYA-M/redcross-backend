@@ -12,9 +12,9 @@ class CreateReport(BaseModel):
     """Input schema for creating a report.
 
     Structured claims (severity, affected_population, needs,
-    infrastructure_status, available_needs) are optional: reports that do not
-    carry a claim leave the field unset, and missing claims are never treated
-    as conflicts.
+    infrastructure_status, available_needs, vulnerability,
+    time_sensitivity) are optional: reports that do not carry a claim leave
+    the field unset, and missing claims are never treated as conflicts.
     """
 
     original_text: str
@@ -31,6 +31,8 @@ class CreateReport(BaseModel):
     affected_population: int | None = Field(default=None, ge=0)
     infrastructure_status: InfrastructureStatus | None = None
     available_needs: list[NeedCategory] = Field(default_factory=list)
+    vulnerability: list[str] = Field(default_factory=list)
+    time_sensitivity: str | None = None
 
 
 class UpdateReport(BaseModel):
@@ -53,6 +55,8 @@ class UpdateReport(BaseModel):
     affected_population: int | None = Field(default=None, ge=0)
     infrastructure_status: InfrastructureStatus | None = None
     available_needs: list[NeedCategory] | None = None
+    vulnerability: list[str] | None = None
+    time_sensitivity: str | None = None
 
 
 class ReportResponse(BaseModel):
@@ -75,3 +79,5 @@ class ReportResponse(BaseModel):
     affected_population: int | None = Field(default=None, ge=0)
     infrastructure_status: InfrastructureStatus | None = None
     available_needs: list[NeedCategory] = Field(default_factory=list)
+    vulnerability: list[str] = Field(default_factory=list)
+    time_sensitivity: str | None = None
