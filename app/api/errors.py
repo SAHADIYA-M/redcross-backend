@@ -25,9 +25,20 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def validation_exception_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        # Keep the response JSON-safe and free of internal exception objects:
+        # pydantic's errors may carry non-serializable ctx (e.g. the exception
+        # instance from a model_validator), so we project only the safe fields.
+        detail = [
+            {
+                "loc": error.get("loc"),
+                "msg": error.get("msg"),
+                "type": error.get("type"),
+            }
+            for error in exc.errors()
+        ]
         return JSONResponse(
             status_code=422,
-            content={"detail": exc.errors()},
+            content={"detail": detail},
         )
 
     @app.exception_handler(Exception)

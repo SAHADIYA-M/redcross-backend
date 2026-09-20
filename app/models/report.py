@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from app.ai.schemas import NeedCategory, SeverityLevel
 from app.conflicts.schemas import InfrastructureStatus
 from app.location.schemas import LocationStatus
+from app.verification.schemas import VerificationStatus
 
 
 class ReportStatus(str, Enum):
@@ -48,3 +49,14 @@ class Report(BaseModel):
     available_needs: list[NeedCategory] = Field(default_factory=list)
     vulnerability: list[str] = Field(default_factory=list)
     time_sensitivity: str | None = None
+    verification_status: VerificationStatus = VerificationStatus.UNVERIFIED
+    original_extraction: dict[str, object] = Field(
+        default_factory=dict,
+        description=(
+            "Immutable snapshot of the AI-generated structured interpretation "
+            "as first persisted. Never overwritten by verification, so AI "
+            "output always stays distinguishable from human corrections. "
+            "Populated in ReportService.create; the verification workflow "
+            "never touches it."
+        ),
+    )

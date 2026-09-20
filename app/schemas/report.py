@@ -6,6 +6,7 @@ from app.ai.schemas import NeedCategory, SeverityLevel
 from app.conflicts.schemas import InfrastructureStatus
 from app.location.schemas import LocationStatus
 from app.models.report import ReportStatus
+from app.verification.schemas import VerificationStatus
 
 
 class CreateReport(BaseModel):
@@ -81,3 +82,5 @@ class ReportResponse(BaseModel):
     available_needs: list[NeedCategory] = Field(default_factory=list)
     vulnerability: list[str] = Field(default_factory=list)
     time_sensitivity: str | None = None
+    verification_status: VerificationStatus = VerificationStatus.UNVERIFIED
+    original_extraction: dict[str, object] = Field(default_factory=dict)
