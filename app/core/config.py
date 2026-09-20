@@ -80,3 +80,8 @@ class Settings:
 
 
 settings = Settings()
+
+
+def get_settings() -> Settings:
+    """Return the singleton Settings instance."""
+    return settings
