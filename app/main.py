@@ -2,14 +2,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.ai import router as ai_router
+from app.api.analytics import router as analytics_router
 from app.api.audit import router as audit_router
 from app.api.conflicts import router as conflicts_router
 from app.api.duplicates import router as duplicates_router
 from app.api.errors import register_exception_handlers
 from app.api.locations import router as locations_router
 from app.api.map import router as map_router
+from app.api.map_responses import router as map_responses_router
 from app.api.priority import router as priority_router
 from app.api.reports import router as reports_router
+from app.api.responses import router as responses_router
 from app.api.search import router as search_router
 from app.api.verification import router as verification_router
 from app.api.verification import verification_list_router
@@ -34,6 +37,9 @@ app.include_router(verification_list_router)
 app.include_router(audit_router)
 app.include_router(search_router)
 app.include_router(map_router)
+app.include_router(responses_router)
+app.include_router(map_responses_router)
+app.include_router(analytics_router)
 
 app.add_middleware(
     CORSMiddleware,

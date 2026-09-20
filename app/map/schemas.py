@@ -17,7 +17,7 @@ coordinates that are NOT the 0,0 "null island" fallback; reports without
 coordinates, or marked UNCERTAIN, are never silently placed anywhere.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
@@ -26,8 +26,16 @@ from app.ai.schemas import NeedCategory
 from app.location.schemas import LocationStatus
 from app.models.report import ReportStatus
 from app.priority.schemas import PriorityLevel
+from app.response_activity.schemas import ResponseStatus
 from app.search.schemas import MAX_PAGE_SIZE, SearchQuery
 from app.verification.schemas import VerificationStatus
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Normalize a datetime for comparison without shifting its meaning."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 class MapSortField(str, Enum):
@@ -208,4 +216,63 @@ class MapResponse(BaseModel):
     """
 
     items: list[MapReportItem] = Field(default_factory=list)
+    total: int = Field(ge=0)
+
+
+class ResponseMapQuery(BaseModel):
+    """Validated filters for GET /api/map/responses.
+
+    Encodes the map-relevant subset of the Phase 12 response filters so the
+    response layer and its map projection share the exact same enums. Time
+    bounds follow the API convention (naive datetimes interpreted as UTC).
+    """
+
+    report_id: str | None = None
+    need: NeedCategory | None = None
+    response_status: ResponseStatus | None = None
+    source: str | None = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+
+    @model_validator(mode="after")
+    def _validate_time_range(self) -> "ResponseMapQuery":
+        if (
+            self.start_time is not None
+            and self.end_time is not None
+            and _as_utc(self.start_time) > _as_utc(self.end_time)
+        ):
+            raise ValueError("start_time must be <= end_time")
+        return self
+
+
+class ResponseMapItem(BaseModel):
+    """One geoprojected response activity, suitable for a map marker.
+
+    Only CONFIRMED, in-range, non-zero coordinates place an activity;
+    UNCERTAIN or missing locations are never placed anywhere. ``location_status``
+    is CONFIRMED for every point (that is the only state that geocodes); the
+    underlying activity keeps its own raw ``location`` text untouched. Notes and
+    affected-population details are deliberately omitted for map hygiene; the
+    activity remains traceable via ``response_id``/``report_id``.
+    """
+
+    response_id: str
+    report_id: str
+    latitude: float = Field(ge=-90.0, le=90.0)
+    longitude: float = Field(ge=-180.0, le=180.0)
+    location_status: LocationStatus
+    location_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    timestamp: datetime
+    need: NeedCategory | None = None
+    response_status: ResponseStatus
+    activity: str
+    source: str | None = None
+
+
+class ResponseMapResponse(BaseModel):
+    """Response activities with valid coordinates. An empty list means only
+    that no recorded activity is mappable (or none match); it never implies
+    no response activity exists anywhere."""
+
+    items: list[ResponseMapItem] = Field(default_factory=list)
     total: int = Field(ge=0)

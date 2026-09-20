@@ -17,6 +17,9 @@ class AuditAction(str, Enum):
     Phase 9 audit entries mirror the verification actions. The enum is kept
     separate from VerificationAction so later phases can add audit events
     (e.g. report creation, status changes) without changing verification.
+    UPDATE_RESPONSE records a response-activity lifecycle change (Phase 12);
+    the record keeps its ``report_id`` pointing at the report the response
+    addresses, so every response change stays traceable to a reported need.
     """
 
     APPROVE = "APPROVE"
@@ -24,6 +27,7 @@ class AuditAction(str, Enum):
     REJECT = "REJECT"
     MARK_UNCERTAIN = "MARK_UNCERTAIN"
     REQUEST_ASSESSMENT = "REQUEST_ASSESSMENT"
+    UPDATE_RESPONSE = "UPDATE_RESPONSE"
 
 
 class AuditRecord(BaseModel):
