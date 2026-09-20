@@ -1,3 +1,4 @@
+from app.services.report_service import ReportService
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status

@@ -218,3 +218,5 @@ def app_client(auth_setup, admin_headers, storage_repos) -> TestClient:
         client.headers.update(admin_headers)
         yield client
     app.dependency_overrides.clear()
+import os
+os.environ['USE_PERSISTENT_DB'] = 'false'

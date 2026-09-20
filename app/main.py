@@ -5,11 +5,14 @@ from app.api.ai import router as ai_router
 from app.api.analytics import router as analytics_router
 from app.api.audit import router as audit_router
 from app.api.auth import router as auth_router
+from app.api.fusion import router as fusion_router
+from app.api.clusters import router as clusters_router
 from app.api.conflicts import router as conflicts_router
 from app.api.deps import get_auth_service
 from app.api.duplicates import router as duplicates_router
 from app.api.errors import register_exception_handlers
 from app.api.locations import router as locations_router
+from app.api.lookups import needs_router, priorities_router
 from app.api.map import router as map_router
 from app.api.map_responses import router as map_responses_router
 from app.api.priority import router as priority_router
@@ -34,6 +37,9 @@ app = FastAPI(
 )
 
 app.include_router(reports_router)
+app.include_router(clusters_router)
+app.include_router(needs_router)
+app.include_router(priorities_router)
 app.include_router(ai_router)
 app.include_router(locations_router)
 app.include_router(duplicates_router)
@@ -49,6 +55,7 @@ app.include_router(map_responses_router)
 app.include_router(analytics_router)
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(fusion_router)
 
 app.add_middleware(
     CORSMiddleware,
