@@ -7,6 +7,7 @@ from app.api.conflicts import router as conflicts_router
 from app.api.duplicates import router as duplicates_router
 from app.api.errors import register_exception_handlers
 from app.api.locations import router as locations_router
+from app.api.map import router as map_router
 from app.api.priority import router as priority_router
 from app.api.reports import router as reports_router
 from app.api.search import router as search_router
@@ -32,6 +33,7 @@ app.include_router(verification_router)
 app.include_router(verification_list_router)
 app.include_router(audit_router)
 app.include_router(search_router)
+app.include_router(map_router)
 
 app.add_middleware(
     CORSMiddleware,

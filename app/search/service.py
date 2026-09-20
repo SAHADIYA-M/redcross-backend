@@ -74,24 +74,14 @@ class SearchService:
     def search(self, query: SearchQuery) -> SearchResponse:
         """Run the query and return a paged, sorted result set.
 
-        Priority is computed once per report per call (and cached) through the
-        Phase 8 service; reports without usable priority input carry
-        None/None and are handled as "unknown" everywhere - they are excluded
-        only when a priority filter explicitly requires a value, and they sort
-        last rather than as LOW.
+        Priority is computed once per report for output and sorting (and
+        cached) through the Phase 8 service; reports without usable priority
+        input carry None/None and are handled as "unknown" everywhere - they
+        are excluded only when a priority filter explicitly requires a value,
+        and they sort last rather than as LOW.
         """
-        # A bounding-box search needs a working geocoder; fail fast rather
-        # than silently returning empty results when it is not configured.
-        if query.has_bounding_box and self._location_service is None:
-            raise LocationSearchUnavailableError()
-
-        reports = self._repository.get_all()
-        priorities = self._priority_map(reports)
-        candidates = [
-            report
-            for report in reports
-            if self._matches(report, query) and self._matches_priority(report.id, query, priorities)
-        ]
+        candidates = self.filtered_reports(query)
+        priorities = self._priority_map(candidates)
         ordered = self._sort(candidates, query, priorities)
 
         total = len(ordered)
@@ -103,6 +93,37 @@ class SearchService:
             page=query.page,
             page_size=query.page_size,
         )
+
+    def filtered_reports(self, query: SearchQuery) -> list[Report]:
+        """Return the reports matching every filter in ``query`` (no paging).
+
+        Shared by /api/search/reports (which sorts and pages the result) and
+        the Phase 11 map endpoint (which projects the matches onto
+        coordinates), so filter behaviour is implemented exactly once.
+        """
+        # A bounding-box search needs a working geocoder; fail fast rather
+        # than silently returning empty results when it is not configured.
+        if query.has_bounding_box and self._location_service is None:
+            raise LocationSearchUnavailableError()
+
+        reports = self._repository.get_all()
+        priorities = self._priority_map(reports)
+        return [
+            report
+            for report in reports
+            if self._matches(report, query) and self._matches_priority(report.id, query, priorities)
+        ]
+
+    def report_priorities(
+        self, reports: list[Report]
+    ) -> dict[str, PriorityResponse | None]:
+        """Map each report id to its backend-computed priority (None when unknown).
+
+        Exposed so feature layers share the exact same priority calculation
+        and caching rules as the search endpoint. Deterministic: the stored
+        reports never change during a call, so repeated calls agree.
+        """
+        return self._priority_map(reports)
 
     # ------------------------------------------------------------- filtering
 

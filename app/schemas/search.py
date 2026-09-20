@@ -58,8 +58,8 @@ class SearchResponse(BaseModel):
 
     ``total`` reflects the number of matching reports before pagination. An
     empty ``items`` list means there are simply no matching reports; it never
-    implies zero humanitarian need (information-gap analysis is a later
-    phase).
+    implies zero humanitarian need (see the Phase 11 information-gap endpoint
+    for information sufficiency analysis).
     """
 
     items: list[SearchResultItem] = Field(default_factory=list)
