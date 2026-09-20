@@ -9,6 +9,7 @@ from app.api.errors import register_exception_handlers
 from app.api.locations import router as locations_router
 from app.api.priority import router as priority_router
 from app.api.reports import router as reports_router
+from app.api.search import router as search_router
 from app.api.verification import router as verification_router
 from app.api.verification import verification_list_router
 from app.core.config import settings
@@ -30,6 +31,7 @@ app.include_router(priority_router)
 app.include_router(verification_router)
 app.include_router(verification_list_router)
 app.include_router(audit_router)
+app.include_router(search_router)
 
 app.add_middleware(
     CORSMiddleware,
