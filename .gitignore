@@ -17,3 +17,6 @@ venv/
 
 # Testing
 .pytest_cache/
+
+# Local Runtime Data
+data/

@@ -18,11 +18,6 @@ PUBLIC_OPERATIONS = {
     ("/health", "get"),
     ("/api/auth/register", "post"),
     ("/api/auth/login", "post"),
-    ("/api/clusters", "get"),
-    ("/api/clusters/{cluster_id}",
-    "/api/fusion",
-    "/api/fusion/{candidate_id}",
-    "/api/fusion/{candidate_id}/resolve", "get"),
     ("/api/needs", "get"),
     ("/api/priorities", "get"),
 }
@@ -142,7 +137,7 @@ def test_public_surface_answers_without_authentication() -> None:
     assert client.get("/openapi.json").status_code == 200
     registered = client.post(
         "/api/auth/register",
-        json={"username": "volunteer_9", "password": "s3cret-pass"},
+        json={"username": f"volunteer_{uuid.uuid4().hex[:6]}", "password": "s3cret-pass"},
     )
     assert registered.status_code == 201
 
