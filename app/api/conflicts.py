@@ -1,3 +1,4 @@
+from app.conflicts.service import ConflictDetectionService
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status

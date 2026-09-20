@@ -18,6 +18,7 @@ repositories/priority from here.
 
 from app.conflicts.service import ConflictDetectionService
 from app.duplicates.service import DuplicateDetectionService
+from app.repositories.fusion_repository import InMemoryFusionRepository, FusionRepository
 from app.repositories import (
     InMemoryAuditRepository,
     InMemoryReportRepository,
@@ -34,13 +35,33 @@ from app.services.auth_service import AuthService
 from app.services.priority_service import PriorityService
 from app.services.report_service import ReportService
 from app.services.response_service import ResponseService
+from app.services.fusion_service import FusionService
 from app.verification.service import VerificationService
 
-report_repository = InMemoryReportRepository()
-user_repository = InMemoryUserRepository()
-verification_repository = InMemoryVerificationRepository()
-audit_repository = InMemoryAuditRepository()
-response_repository = InMemoryResponseRepository()
+from app.repositories.file_repositories import (
+    FileFusionRepository,
+    FileAuditRepository,
+    FileReportRepository,
+    FileResponseRepository,
+    FileUserRepository,
+    FileVerificationRepository,
+)
+from app.core.config import settings
+
+if settings.use_persistent_db:
+    report_repository = FileReportRepository(settings.data_dir)
+    user_repository = FileUserRepository(settings.data_dir)
+    verification_repository = FileVerificationRepository(settings.data_dir)
+    audit_repository = FileAuditRepository(settings.data_dir)
+    fusion_repository = FileFusionRepository(settings.data_dir)
+    response_repository = FileResponseRepository(settings.data_dir)
+else:
+    report_repository = InMemoryReportRepository()
+    user_repository = InMemoryUserRepository()
+    verification_repository = InMemoryVerificationRepository()
+    audit_repository = InMemoryAuditRepository()
+    fusion_repository = InMemoryFusionRepository()
+    response_repository = InMemoryResponseRepository()
 
 _auth_service = AuthService(user_repository)
 _report_service = ReportService(report_repository)
@@ -147,3 +168,10 @@ def get_conflict_service() -> ConflictDetectionService:
     Storage is swapped in get_report_repository without changing this factory.
     """
     return ConflictDetectionService(report_repository)
+_fusion_service = FusionService(fusion_repository)
+
+def get_fusion_repository() -> FusionRepository:
+    return fusion_repository
+
+def get_fusion_service() -> FusionService:
+    return _fusion_service

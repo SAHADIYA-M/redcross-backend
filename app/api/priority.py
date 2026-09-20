@@ -1,3 +1,4 @@
+from app.services.priority_service import PriorityService
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status

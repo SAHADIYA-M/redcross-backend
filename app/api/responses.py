@@ -12,6 +12,7 @@ ResponseRepository + ReportRepository + AuditRepository (in-memory today,
 PostgreSQL later).
 """
 
+from app.services.response_service import ResponseService
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status

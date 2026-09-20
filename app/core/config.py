@@ -51,6 +51,10 @@ class Settings:
         self.dev_admin_password: str = os.getenv(
             "DEV_ADMIN_PASSWORD", "dev_admin_password"
         )
+        self.use_persistent_db: bool = os.getenv("USE_PERSISTENT_DB", "true").lower() in (
+            _DEV_TRUTHY
+        )
+        self.data_dir: str = os.getenv("DATA_DIR", "data")
 
     def effective_jwt_secret_key(self) -> str:
         """Return the JWT signing secret.

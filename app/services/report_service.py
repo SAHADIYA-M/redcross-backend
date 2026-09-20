@@ -77,7 +77,31 @@ class ReportService:
                 "original_extraction": _snapshot_extraction(report),
             }
         )
-        return self._repository.create(stored)
+        created = self._repository.create(stored)
+        try:
+            from app.core.container import get_fusion_service
+            import hashlib
+            
+            location = created.location or "Unknown Location"
+            need = created.needs[0].value if created.needs else "General Request"
+            key = f"{location}::{need}"
+            cluster_id = f"NEX-{hashlib.md5(key.encode()).hexdigest()[:6].upper()}"
+            
+            all_reports = self._repository.get_all()
+            cluster_reports = []
+            for r in all_reports:
+                r_location = r.location or "Unknown Location"
+                r_need = r.needs[0].value if r.needs else "General Request"
+                r_key = f"{r_location}::{r_need}"
+                if r_key == key:
+                    cluster_reports.append(r)
+            
+            get_fusion_service().analyze_cluster(cluster_id, cluster_reports)
+        except Exception as e:
+            import logging
+            logging.error(f"Fusion analysis failed: {e}")
+            
+        return created
 
     def get_all(self) -> list[Report]:
         return self._repository.get_all()

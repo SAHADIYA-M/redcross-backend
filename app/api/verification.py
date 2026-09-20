@@ -1,3 +1,4 @@
+from app.verification.service import VerificationService
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
