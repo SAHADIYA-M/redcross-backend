@@ -12,7 +12,7 @@ BASE_TIME = "2026-09-18T10:00:00Z"
 
 
 @pytest.fixture()
-def client():
+def client(auth_setup, admin_headers):
     """Share ONE repository between report creation and conflict detection."""
     repository = InMemoryReportRepository()
     app.dependency_overrides[get_report_service] = lambda: ReportService(repository)
@@ -20,6 +20,7 @@ def client():
         lambda: ConflictDetectionService(repository)
     )
     with TestClient(app) as test_client:
+        test_client.headers.update(admin_headers)
         yield test_client
     app.dependency_overrides.clear()
 

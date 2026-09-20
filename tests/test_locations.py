@@ -37,8 +37,9 @@ class FakeGeocoder:
 
 
 @pytest.fixture()
-def location_client() -> TestClient:
+def location_client(auth_setup, admin_headers) -> TestClient:
     with TestClient(app) as client:
+        client.headers.update(admin_headers)
         yield client
     app.dependency_overrides.clear()
 

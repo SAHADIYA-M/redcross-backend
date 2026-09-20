@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.api.deps import get_current_active_user
 from app.core.config import settings
 from app.location.errors import (
     GeocoderConfigurationError,
@@ -11,6 +12,7 @@ from app.location.errors import (
 )
 from app.location.providers import build_geocoder
 from app.location.service import LocationService
+from app.models.user import User
 from app.schemas.location import GeocodeRequest, GeocodeResponse
 
 router = APIRouter(prefix="/api/locations", tags=["locations"])
@@ -30,6 +32,7 @@ def get_location_service() -> LocationService:
 @router.post("/geocode", response_model=GeocodeResponse)
 def geocode_location(
     data: GeocodeRequest,
+    current_user: Annotated[User, Depends(get_current_active_user)],
     service: Annotated[LocationService, Depends(get_location_service)],
 ) -> GeocodeResponse:
     try:

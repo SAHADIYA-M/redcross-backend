@@ -16,8 +16,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from app.api.deps import get_current_active_user, require_roles
 from app.api.reports import get_report_repository
 from app.api.verification import get_audit_repository
+from app.models.user import RESPONDER_ROLES, User
 from app.repositories.response_repository import ResponseRepository
 from app.repositories.in_memory_response_repository import (
     InMemoryResponseRepository,
@@ -38,6 +40,8 @@ from app.services.response_service import (
 router = APIRouter(prefix="/api/responses", tags=["responses"])
 
 _response_repository = InMemoryResponseRepository()
+
+_responder = require_roles(*sorted(RESPONDER_ROLES))
 
 
 def get_response_repository() -> ResponseRepository:
@@ -71,13 +75,14 @@ def get_response_service() -> ResponseService:
 )
 def create_response(
     data: CreateResponse,
+    responder: Annotated[User, Depends(_responder)],
     service: Annotated[ResponseService, Depends(get_response_service)],
 ) -> ResponseActivity:
     """Record a response activity against a validated report.
 
-    The referenced report must exist (404 otherwise). RECORDING IS NOT PROOF:
-    this only records that an activity was logged, it does not claim anything
-    about the real world.
+    Requires RESPONDER or ADMIN. The referenced report must exist (404
+    otherwise). RECORDING IS NOT PROOF: this only records that an activity was
+    logged, it does not claim anything about the real world.
     """
     try:
         return service.create(data)
@@ -91,6 +96,7 @@ def create_response(
 @router.get("", response_model=list[ResponseActivity])
 def list_responses(
     params: Annotated[ResponseQuery, Query()],
+    current_user: Annotated[User, Depends(get_current_active_user)],
     service: Annotated[ResponseService, Depends(get_response_service)],
 ) -> list[ResponseActivity]:
     """List response activities, newest first, with optional filters.
@@ -105,9 +111,10 @@ def list_responses(
 @router.get("/{response_id}", response_model=ResponseActivity)
 def get_response(
     response_id: str,
+    current_user: Annotated[User, Depends(get_current_active_user)],
     service: Annotated[ResponseService, Depends(get_response_service)],
 ) -> ResponseActivity:
-    """Retrieve a single response activity."""
+    """Retrieve a single response activity (authenticated users only)."""
     try:
         return service.get_by_id(response_id)
     except ResponseNotFoundError as exc:
@@ -121,14 +128,20 @@ def get_response(
 def update_response(
     response_id: str,
     data: UpdateResponse,
+    responder: Annotated[User, Depends(_responder)],
     service: Annotated[ResponseService, Depends(get_response_service)],
 ) -> ResponseActivity:
     """Update a response activity's status or benign details in place.
 
+    Requires RESPONDER or ADMIN. The authenticated identity is authoritative:
+    any actor_id supplied in the body is replaced with the authenticated user
+    so a client can never spoof who changed the activity.
+
     Identity (response_id/report_id/need) is preserved. A status change is
     appended to the Phase 9 audit log (action UPDATE_RESPONSE) with the
-    optional actor and reason so the lifecycle change stays traceable.
+    authenticated actor and reason so the lifecycle change stays traceable.
     """
+    data.actor_id = responder.user_id
     try:
         return service.update(response_id, data)
     except ResponseNotFoundError as exc:

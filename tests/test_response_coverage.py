@@ -38,7 +38,7 @@ RESPONSE_TIME = "2026-09-20T10:00:00Z"
 
 
 @pytest.fixture()
-def client():
+def client(auth_setup, admin_headers):
     report_repository = InMemoryReportRepository()
     response_repository = InMemoryResponseRepository()
     verification_repository = InMemoryVerificationRepository()
@@ -80,6 +80,7 @@ def client():
         lambda: InformationGapService(report_repository, location_service)
     )
     with TestClient(app) as test_client:
+        test_client.headers.update(admin_headers)
         yield test_client
     app.dependency_overrides.clear()
 

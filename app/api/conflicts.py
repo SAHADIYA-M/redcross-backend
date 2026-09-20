@@ -2,8 +2,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.api.deps import get_current_active_user
 from app.api.reports import get_report_repository
 from app.conflicts.service import ConflictDetectionService
+from app.models.user import User
 from app.repositories.report_repository import ReportRepository
 from app.schemas.conflict import ConflictDetectionResponse
 from app.services.report_service import ReportNotFoundError
@@ -24,6 +26,7 @@ def get_conflict_service() -> ConflictDetectionService:
 @router.post("/{report_id}/conflicts", response_model=ConflictDetectionResponse)
 def detect_conflicts(
     report_id: str,
+    current_user: Annotated[User, Depends(get_current_active_user)],
     service: Annotated[
         ConflictDetectionService, Depends(get_conflict_service)
     ],

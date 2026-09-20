@@ -29,9 +29,10 @@ REPORT_BASE = "2026-09-20T08:00:00Z"
 
 
 @pytest.fixture()
-def client():
+def client(auth_setup, admin_headers):
     """Clean, isolated in-memory storage shared by reports, responses and
-    the audit log, wired to the live FastAPI application."""
+    the audit log, wired to the live FastAPI application. The client is
+    pre-authenticated as the seeded ADMIN user."""
     report_repository = InMemoryReportRepository()
     response_repository = InMemoryResponseRepository()
     verification_repository = InMemoryVerificationRepository()
@@ -62,6 +63,7 @@ def client():
         )
     )
     with TestClient(app) as test_client:
+        test_client.headers.update(admin_headers)
         yield test_client
     app.dependency_overrides.clear()
 
@@ -410,7 +412,10 @@ def test_update_reports_and_identity_cannot_be_changed(client: TestClient) -> No
 # -------------------------------------------------------------------- audit
 
 
-def test_status_change_is_audited(client: TestClient) -> None:
+def test_status_change_is_audited(client: TestClient, auth_setup) -> None:
+    from app.models.user import UserRole
+
+    admin_user = auth_setup.users[UserRole.ADMIN]
     report = _create_report(client)
     created = _create_response(client, report["id"])
     client.patch(
@@ -426,7 +431,9 @@ def test_status_change_is_audited(client: TestClient) -> None:
     assert len(matches) == 1
     entry = matches[0]
     assert entry["report_id"] == report["id"]
-    assert entry["actor_id"] == "user_7"
+    # The authenticated identity is authoritative; a spoofed "user_7" is
+    # never recorded (Phase 13).
+    assert entry["actor_id"] == admin_user.user_id
     assert entry["reason"] == "team on site"
     assert entry["old_value"]["response_status"] == "PLANNED"
     assert entry["new_value"]["response_status"] == "IN_PROGRESS"

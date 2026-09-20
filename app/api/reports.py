@@ -2,12 +2,16 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.api.deps import get_current_active_user, require_roles
+from app.models.user import REPORT_WRITER_ROLES, User
 from app.repositories import InMemoryReportRepository
 from app.repositories.report_repository import ReportRepository
 from app.schemas.report import CreateReport, ReportResponse, UpdateReport
 from app.services.report_service import ReportNotFoundError, ReportService
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
+
+_report_writer = require_roles(*sorted(REPORT_WRITER_ROLES))
 
 _repository = InMemoryReportRepository()
 _report_service = ReportService(_repository)
@@ -40,6 +44,7 @@ def get_report_service() -> ReportService:
 )
 def create_report(
     data: CreateReport,
+    current_user: Annotated[User, Depends(_report_writer)],
     service: Annotated[ReportService, Depends(get_report_service)],
 ) -> ReportResponse:
     return ReportResponse.model_validate(service.create(data))
@@ -47,6 +52,7 @@ def create_report(
 
 @router.get("", response_model=list[ReportResponse])
 def list_reports(
+    current_user: Annotated[User, Depends(get_current_active_user)],
     service: Annotated[ReportService, Depends(get_report_service)],
 ) -> list[ReportResponse]:
     return [ReportResponse.model_validate(report) for report in service.get_all()]
@@ -55,6 +61,7 @@ def list_reports(
 @router.get("/{report_id}", response_model=ReportResponse)
 def get_report(
     report_id: str,
+    current_user: Annotated[User, Depends(get_current_active_user)],
     service: Annotated[ReportService, Depends(get_report_service)],
 ) -> ReportResponse:
     try:
@@ -71,6 +78,7 @@ def get_report(
 def update_report(
     report_id: str,
     data: UpdateReport,
+    current_user: Annotated[User, Depends(_report_writer)],
     service: Annotated[ReportService, Depends(get_report_service)],
 ) -> ReportResponse:
     try:

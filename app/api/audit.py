@@ -2,8 +2,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from app.api.deps import get_current_active_user
 from app.api.verification import get_audit_repository
 from app.audit.schemas import AuditAction, AuditRecord
+from app.models.user import User
 from app.repositories.audit_repository import AuditRepository
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
@@ -12,10 +14,11 @@ router = APIRouter(prefix="/api/audit", tags=["audit"])
 @router.get("", response_model=list[AuditRecord])
 def list_audit_records(
     repository: Annotated[AuditRepository, Depends(get_audit_repository)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
     report_id: str | None = None,
     action: AuditAction | None = None,
 ) -> list[AuditRecord]:
-    """Query the append-only audit trail.
+    """Query the append-only audit trail (authenticated users only).
 
     Optional filters: report ID and audit action. Records are returned newest
     first. The audit log is immutable: no endpoint edits or deletes records,

@@ -2,7 +2,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.api.deps import get_current_active_user
 from app.api.reports import get_report_repository
+from app.models.user import User
 from app.repositories.report_repository import ReportRepository
 from app.schemas.priority import PriorityResponse
 from app.services.priority_service import (
@@ -27,6 +29,7 @@ def get_priority_service() -> PriorityService:
 @router.post("/{report_id}/priority", response_model=PriorityResponse)
 def calculate_priority(
     report_id: str,
+    current_user: Annotated[User, Depends(get_current_active_user)],
     service: Annotated[PriorityService, Depends(get_priority_service)],
 ) -> PriorityResponse:
     try:

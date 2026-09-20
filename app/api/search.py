@@ -12,12 +12,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from app.api.deps import get_current_active_user
 from app.api.priority import get_priority_service
 from app.api.reports import get_report_repository
 from app.core.config import settings
 from app.location.errors import GeocoderConfigurationError
 from app.location.providers import build_geocoder
 from app.location.service import LocationService
+from app.models.user import User
 from app.repositories.report_repository import ReportRepository
 from app.schemas.search import SearchResponse
 from app.search.schemas import SearchQuery
@@ -56,9 +58,10 @@ def get_search_service() -> SearchService:
 @router.get("/reports", response_model=SearchResponse)
 def search_reports(
     params: Annotated[SearchQuery, Query()],
+    current_user: Annotated[User, Depends(get_current_active_user)],
     service: Annotated[SearchService, Depends(get_search_service)],
 ) -> SearchResponse:
-    """Search and filter humanitarian reports.
+    """Search and filter humanitarian reports (authenticated users only).
 
     Combines every supplied filter (AND semantics), sorts the matches by the
     allowlisted sort field, and returns ``page_size`` results for the

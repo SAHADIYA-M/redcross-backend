@@ -15,6 +15,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from app.api.deps import get_current_active_user
 from app.api.priority import get_priority_service
 from app.api.reports import get_report_repository
 from app.core.config import settings
@@ -26,6 +27,7 @@ from app.location.errors import GeocoderConfigurationError
 from app.location.providers import build_geocoder
 from app.location.service import LocationService
 from app.map.schemas import MapQuery, MapResponse
+from app.models.user import User
 from app.search.service import LocationSearchUnavailableError, SearchService
 from app.services.information_gap_service import InformationGapService
 from app.services.map_service import MapService
@@ -84,9 +86,10 @@ def get_information_gap_service() -> InformationGapService:
 @router.get("/reports", response_model=MapResponse)
 def map_reports(
     params: Annotated[MapQuery, Query()],
+    current_user: Annotated[User, Depends(get_current_active_user)],
     service: Annotated[MapService, Depends(get_map_service)],
 ) -> MapResponse:
-    """Return geoprojected report points for the frontend map.
+    """Return geoprojected report points for the frontend map (auth required).
 
     Only reports whose location resolves to a CONFIRMED, in-range, non-zero
     coordinate are included. A report with an UNCERTAIN location keeps its
@@ -106,9 +109,10 @@ def map_reports(
 @router.get("/information-gaps", response_model=InformationGapResponse)
 def information_gaps(
     params: Annotated[InformationGapQuery, Query()],
+    current_user: Annotated[User, Depends(get_current_active_user)],
     service: Annotated[InformationGapService, Depends(get_information_gap_service)],
 ) -> InformationGapResponse:
-    """Return per-area information-sufficiency assessments.
+    """Return per-area information-sufficiency assessments (auth required).
 
     An area flagged INSUFFICIENT_INFORMATION means "we do not know enough
     about this area" - it says nothing about whether need is present or

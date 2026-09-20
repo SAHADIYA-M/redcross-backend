@@ -43,9 +43,11 @@ class FakeAIClient:
 
 
 @pytest.fixture()
-def ai_client() -> TestClient:
-    """TestClient against the real app; the AI service is injected per test."""
+def ai_client(auth_setup, admin_headers) -> TestClient:
+    """TestClient against the real app; the AI service is injected per test.
+    The client is pre-authenticated as the seeded ADMIN user."""
     with TestClient(app) as client:
+        client.headers.update(admin_headers)
         yield client
     app.dependency_overrides.clear()
 

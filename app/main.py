@@ -4,7 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.ai import router as ai_router
 from app.api.analytics import router as analytics_router
 from app.api.audit import router as audit_router
+from app.api.auth import router as auth_router
 from app.api.conflicts import router as conflicts_router
+from app.api.deps import get_auth_service
 from app.api.duplicates import router as duplicates_router
 from app.api.errors import register_exception_handlers
 from app.api.locations import router as locations_router
@@ -14,10 +16,12 @@ from app.api.priority import router as priority_router
 from app.api.reports import router as reports_router
 from app.api.responses import router as responses_router
 from app.api.search import router as search_router
+from app.api.users import router as users_router
 from app.api.verification import router as verification_router
 from app.api.verification import verification_list_router
 from app.core.config import settings
 from app.schemas.response import HealthResponse, MessageResponse
+from app.services.auth_service import AuthService, seed_development_admin
 
 app = FastAPI(
     title=settings.app_name,
@@ -40,6 +44,8 @@ app.include_router(map_router)
 app.include_router(responses_router)
 app.include_router(map_responses_router)
 app.include_router(analytics_router)
+app.include_router(auth_router)
+app.include_router(users_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -49,6 +55,11 @@ app.add_middleware(
 )
 
 register_exception_handlers(app)
+
+# Development-only seed: creates a single ADMIN account, but ONLY when
+# SEED_DEV_ADMIN=true AND the environment is not production. Credentials come
+# from the environment and are documented as development-only.
+seed_development_admin(get_auth_service())
 
 
 @app.get("/", response_model=MessageResponse)

@@ -36,9 +36,10 @@ SENSITIVE_KEYS = {"original_text", "reporter", "evidence", "vulnerability"}
 
 
 @pytest.fixture()
-def client():
+def client(auth_setup, admin_headers):
     """Clean, isolated in-memory storage with the Phase 11 services wired to
-    the SAME repository as the reports API and the stub geocoder."""
+    the SAME repository as the reports API and the stub geocoder. The client
+    is pre-authenticated as the seeded ADMIN user."""
     report_repository = InMemoryReportRepository()
     verification_repository = InMemoryVerificationRepository()
     audit_repository = InMemoryAuditRepository()
@@ -68,6 +69,7 @@ def client():
         lambda: InformationGapService(report_repository, location_service)
     )
     with TestClient(app) as test_client:
+        test_client.headers.update(admin_headers)
         yield test_client
     app.dependency_overrides.clear()
 
