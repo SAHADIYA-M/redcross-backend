@@ -33,8 +33,9 @@ class VerifyRequest(BaseModel):
     reviewer_id: str | None = Field(
         default=None,
         description=(
-            "Optional reviewer identifier. Authentication is not implemented "
-            "yet, so this is a nullable field to be connected to auth later."
+            "Optional reviewer identifier. With authentication implemented, "
+            "the API always overrides this with the authenticated reviewer's "
+            "identity, so the field is informational and never authoritative."
         ),
     )
     edits: VerificationEdits | None = Field(
@@ -75,7 +76,10 @@ class RequestAssessmentRequest(BaseModel):
     )
     reviewer_id: str | None = Field(
         default=None,
-        description="Optional reviewer identifier (auth is a later phase).",
+        description=(
+            "Optional reviewer identifier (always overridden by the "
+            "authenticated reviewer's identity)."
+        ),
     )
 
 

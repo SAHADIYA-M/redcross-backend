@@ -91,10 +91,9 @@ class ReportService:
         if existing is None:
             raise ReportNotFoundError(report_id)
 
-        changes = {
-            key: value
-            for key, value in data.model_dump(exclude_unset=True).items()
-            if value is not None
-        }
+        # exclude_unset keeps only the fields the client actually sent, so an
+        # explicit null is honoured as a request to clear a claim rather than
+        # being dropped (a missing claim must never be treated as a fact).
+        changes = data.model_dump(exclude_unset=True)
         updated = Report.model_validate({**existing.model_dump(), **changes})
         return self._repository.update(report_id, updated)
