@@ -13,18 +13,14 @@ from app.models.user import UserRole
 
 
 class UserCreate(BaseModel):
-    """Body of POST /api/auth/register.
+    """Body of POST /api/auth/register."""
 
-    ``role`` is intentionally absent: public registration always creates the
-    configured default role (VIEWER). Role assignment is an admin-only
-    mechanism.
-    """
-
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     username: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=8, max_length=128)
     full_name: str | None = Field(default=None, max_length=128)
+    role: UserRole | None = Field(default=UserRole.VIEWER)
 
     @field_validator("username")
     @classmethod
@@ -104,3 +100,6 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+RegisterRequest = UserCreate

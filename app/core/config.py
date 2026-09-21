@@ -25,6 +25,7 @@ class Settings:
         if self.environment == "production" and "*" in self.cors_origins:
             raise ValueError("Wildcard CORS (*) is not allowed in production")
         self.gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+        self.database_url: str = os.getenv("DATABASE_URL", "")
         self.gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         self.ai_max_retries: int = int(os.getenv("AI_MAX_RETRIES", "2"))
         if self.ai_max_retries < 0:
