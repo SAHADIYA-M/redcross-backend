@@ -27,6 +27,19 @@ class ReportRepository(ABC):
     def update(self, report_id: str, report: Report) -> Report | None:
         """Replace the stored report with the given one; None if not found."""
 
+    def search_reports(self, query) -> list[Report]:
+        """Return reports matching a validated ``SearchQuery`` via backend filters.
+
+        Optional pushdown hook: storage backends that can translate the
+        query's non-priority filters (text, need, verification status, status,
+        source, incident, time range) into native queries implement it. The
+        default signals "not supported", which makes the search service fall
+        back to ``get_all()`` + in-memory filtering so behavior is unchanged.
+        Bounding-box and priority filters are always handled by the service
+        layer, never here.
+        """
+        raise NotImplementedError
+
 
 class PsycopgReportRepository:
     """PostgreSQL implementation of ReportRepository using psycopg (v3)."""

@@ -5,6 +5,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.database import (
+    DatabaseIntegrityError,
+    DatabaseUnavailableError,
+)
+
 logger = logging.getLogger("app.errors")
 
 
@@ -39,6 +44,24 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=422,
             content={"detail": detail},
+        )
+
+    @app.exception_handler(DatabaseUnavailableError)
+    async def database_unavailable_handler(
+        request: Request, exc: DatabaseUnavailableError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Database unavailable"},
+        )
+
+    @app.exception_handler(DatabaseIntegrityError)
+    async def database_integrity_handler(
+        request: Request, exc: DatabaseIntegrityError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "The record conflicts with existing data"},
         )
 
     @app.exception_handler(Exception)

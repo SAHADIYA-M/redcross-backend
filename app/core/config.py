@@ -56,6 +56,9 @@ class Settings:
             _DEV_TRUTHY
         )
         self.data_dir: str = os.getenv("DATA_DIR", "data")
+        self.db_create_tables_on_startup: bool = os.getenv(
+            "DB_CREATE_TABLES_ON_STARTUP", "false"
+        ).lower() in (_DEV_TRUTHY)
 
     def effective_jwt_secret_key(self) -> str:
         """Return the JWT signing secret.

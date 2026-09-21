@@ -1,19 +1,18 @@
 """Application composition root.
 
-Owns the shared in-memory repositories and the stateless services built over
-them, so routers never reach into sibling routers for data access. Swapping
-the storage backend for PostgreSQL later is done in this module only:
-every ``get_*_repository`` / ``get_*_service`` dependency factory is the swap
-point, and no router changes.
+Owns the shared repositories and the stateless services built over them, so
+routers never reach into sibling routers for data access. Swapping the storage
+backend is done in this module only: every ``get_*_repository`` /
+``get_*_service`` dependency factory is the swap point, and no router changes.
 
-- repositories: shared module singletons (report, user, verification, audit,
-  response) so every feature operates on the same in-memory data;
-- services: either module singletons (auth, report, priority, verification,
-  response) or cheap per-request builds with no shared state.
+Storage selection order:
 
-Feature routers that additionally need a geocoder-backed LocationService keep
-their own thin factories wired through ``app.api.geocoder_deps``; they consume
-repositories/priority from here.
+1. PostgreSQL (``DATABASE_URL`` configured) — repositories backed by SQLAlchemy
+   2.x over the shared session factory from ``app.core.database``. This is the
+   Phase 15 production path; priority results are persisted through the same
+   store.
+2. File (``use_persistent_db``) — JSON-store repositories under ``data/``.
+3. In-memory — default for local development/tests that override dependencies.
 """
 
 from app.conflicts.service import ConflictDetectionService
@@ -46,15 +45,35 @@ from app.repositories.file_repositories import (
     FileUserRepository,
     FileVerificationRepository,
 )
+from app.repositories.postgres_repositories import (
+    PostgresAuditRepository,
+    PostgresFusionRepository,
+    PostgresPriorityResultRepository,
+    PostgresReportRepository,
+    PostgresResponseRepository,
+    PostgresUserRepository,
+    PostgresVerificationRepository,
+)
 from app.core.config import settings
+from app.core.database import get_session_factory
 
-if settings.use_persistent_db:
+if settings.database_url.strip():
+    _session_factory = get_session_factory()
+    report_repository = PostgresReportRepository(_session_factory)
+    user_repository = PostgresUserRepository(_session_factory)
+    verification_repository = PostgresVerificationRepository(_session_factory)
+    audit_repository = PostgresAuditRepository(_session_factory)
+    fusion_repository = PostgresFusionRepository(_session_factory)
+    response_repository = PostgresResponseRepository(_session_factory)
+    priority_result_store = PostgresPriorityResultRepository(_session_factory)
+elif settings.use_persistent_db:
     report_repository = FileReportRepository(settings.data_dir)
     user_repository = FileUserRepository(settings.data_dir)
     verification_repository = FileVerificationRepository(settings.data_dir)
     audit_repository = FileAuditRepository(settings.data_dir)
     fusion_repository = FileFusionRepository(settings.data_dir)
     response_repository = FileResponseRepository(settings.data_dir)
+    priority_result_store = None
 else:
     report_repository = InMemoryReportRepository()
     user_repository = InMemoryUserRepository()
@@ -62,10 +81,11 @@ else:
     audit_repository = InMemoryAuditRepository()
     fusion_repository = InMemoryFusionRepository()
     response_repository = InMemoryResponseRepository()
+    priority_result_store = None
 
 _auth_service = AuthService(user_repository)
 _report_service = ReportService(report_repository)
-_priority_service = PriorityService(report_repository)
+_priority_service = PriorityService(report_repository, result_store=priority_result_store)
 _verification_service = VerificationService(
     report_repository,
     verification_repository,

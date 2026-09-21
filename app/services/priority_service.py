@@ -261,11 +261,20 @@ class PriorityService:
     """Computes deterministic backend priority for a report.
 
     Depends only on the ReportRepository interface so the storage layer can
-    be swapped later without touching the calculation.
+    be swapped later without touching the calculation. An optional ``result_store``
+    (persisted in the PostgreSQL stack) additionally stores the backend-computed
+    result; when None the calculation behaves exactly as before and nothing is
+    persisted. The store is only ever written by the backend — no client can
+    supply a score.
     """
 
-    def __init__(self, repository: ReportRepository) -> None:
+    def __init__(
+        self,
+        repository: ReportRepository,
+        result_store: object | None = None,
+    ) -> None:
         self._repository = repository
+        self._result_store = result_store
 
     def calculate_for_report(self, report_id: str) -> PriorityResponse:
         report = self._repository.get_by_id(report_id)
@@ -311,4 +320,7 @@ class PriorityService:
             "time_sensitivity": report.time_sensitivity,
             "evidence": list(report.evidence),
         }
-        return PriorityResponse(**payload)
+        response = PriorityResponse(**payload)
+        if self._result_store is not None:
+            self._result_store.save(result)
+        return response
