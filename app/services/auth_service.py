@@ -22,7 +22,7 @@ from app.core.config import settings
 from app.core.security import hash_password, verify_password
 from app.models.user import User, UserRole
 from app.repositories.user_repository import UserRepository
-from app.schemas.auth import UserCreate, UserUpdate
+from app.schemas.auth import LoginRequest, UserCreate, UserUpdate
 
 
 class DuplicateUserError(Exception):
@@ -91,13 +91,18 @@ class AuthService:
         )
         return self._repository.create_user(user)
 
-    def authenticate(self, username: str, password: str) -> User:
-        """Validate credentials and return the account (inactive excluded).
+    def authenticate(
+        self, username_or_req: str | LoginRequest, password: str | None = None
+    ) -> User:
+        """Validate credentials and return the account (inactive excluded)."""
+        if isinstance(username_or_req, LoginRequest):
+            username = username_or_req.username
+            password = username_or_req.password
+        else:
+            username = username_or_req
+            if password is None:
+                raise InvalidCredentialsError()
 
-        Raises InvalidCredentialsError for every failure path so a caller
-        cannot tell whether the username or the password was wrong. Inactive
-        accounts cannot authenticate.
-        """
         user = self._repository.get_by_username(username.strip().casefold())
         if user is None or not user.is_active:
             raise InvalidCredentialsError()
