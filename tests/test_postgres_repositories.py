@@ -189,6 +189,44 @@ def test_report_get_cluster_candidates_scopes_to_cluster(factory) -> None:
     assert {r.id for r in other_location} == {"water-kannur"}
 
 
+def test_report_get_cluster_candidates_empty_location_parity(factory) -> None:
+    """A report with an empty-string location clusters under ``Unknown
+    Location`` exactly like a NULL one, mirroring ``Report.cluster_location``
+    and the in-memory repository ('' or None both normalize to the same key)."""
+    from app.models.report import DEFAULT_CLUSTER_LOCATION
+
+    pg_repo = PostgresReportRepository(factory)
+    im_repo = InMemoryReportRepository()
+    for repo in (pg_repo, im_repo):
+        repo.create(_report("empty", location="", needs=[NeedCategory.WATER]))
+        repo.create(_report("null", location=None, needs=[NeedCategory.WATER]))
+        repo.create(_report("real", location="Kozhikode", needs=[NeedCategory.WATER]))
+
+    pg_ids = {
+        r.id
+        for r in pg_repo.get_cluster_candidates(
+            DEFAULT_CLUSTER_LOCATION, NeedCategory.WATER.value
+        )
+    }
+    im_ids = {
+        r.id
+        for r in im_repo.get_cluster_candidates(
+            DEFAULT_CLUSTER_LOCATION, NeedCategory.WATER.value
+        )
+    }
+    assert pg_ids == im_ids == {"empty", "null"}
+
+    # sanity: a concrete location is untouched on both backends
+    assert {
+        r.id
+        for r in pg_repo.get_cluster_candidates("Kozhikode", NeedCategory.WATER.value)
+    } == {"real"}
+    assert {
+        r.id
+        for r in im_repo.get_cluster_candidates("Kozhikode", NeedCategory.WATER.value)
+    } == {"real"}
+
+
 # ---------------------------------------------------------------------------
 # Users
 # ---------------------------------------------------------------------------

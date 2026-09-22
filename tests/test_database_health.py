@@ -41,9 +41,24 @@ def _use_sqlite(monkeypatch):
     max_overflow, pool_timeout) to create_engine; SQLite's default pool
     rejects those, so the test also neutralizes the pool options. This only
     affects the stand-in engine, never production Postgres behavior.
+
+    ``check_same_thread=False`` is test-only plumbing: the /health route is a
+    sync endpoint, so FastAPI executes it in an AnyIO worker thread and the
+    in-memory SQLite connection is created there. SQLAlchemy's
+    ``SingletonThreadPool.dispose()`` runs on the main thread and, since
+    Python 3.13+, sqlite3 refuses to close a connection created in another
+    thread, so the default thread check would leave the handle unclosed and
+    trigger a ResourceWarning. The flag keeps the stand-in connection fully
+    closable from any thread while the database itself is only ever used from
+    the thread that created it.
     """
     monkeypatch.setattr(db.settings, "database_url", "sqlite://")
     monkeypatch.setattr(db, "_pool_options", lambda: {})
+    monkeypatch.setattr(
+        db,
+        "_connect_timeout_kwargs",
+        lambda url, seconds: {"connect_args": {"check_same_thread": False}},
+    )
 
 
 def test_check_database_health_true_when_application_engine_healthy(monkeypatch):

@@ -138,7 +138,11 @@ class AuthService:
         if (is_modifying_role or is_deactivating) and user_id == actor_id:
             raise SelfModificationError("Administrators cannot downgrade or deactivate themselves")
             
-        if existing.role == UserRole.ADMIN and (is_modifying_role or is_deactivating):
+        if (
+            existing.is_active
+            and existing.role == UserRole.ADMIN
+            and (is_modifying_role or is_deactivating)
+        ):
             admins = [u for u in self.list_users() if u.role == UserRole.ADMIN and u.is_active]
             if len(admins) <= 1:
                 raise FinalAdminLockoutError("Cannot modify or deactivate the final active administrator")

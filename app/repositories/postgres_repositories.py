@@ -359,14 +359,19 @@ class PostgresReportRepository(ReportRepository):
     def get_cluster_candidates(self, location: str, need: str) -> list[Report]:
         """Fetch only the reports in the requested fusion cluster (no full scan).
 
-        Matches on the normalized cluster key: ``coalesce(location,
-        'Unknown Location')`` and the first need (``ReportNeedRow.position ==
-        0``) or the no-need fallback — the exact semantics of
-        :attr:`Report.cluster_location` / :attr:`Report.cluster_need`.
+        Matches on the normalized cluster key: ``coalesce(nullif(location,
+        ''), 'Unknown Location')`` and the first need (``ReportNeedRow.position
+        == 0``) or the no-need fallback — the exact semantics of
+        :attr:`Report.cluster_location` / :attr:`Report.cluster_need`. The
+        nullif keeps parity with the in-memory store: a report carrying an
+        empty-string location clusters under ``Unknown Location`` just like a
+        NULL one, instead of silently dropping out of its own cluster.
         """
         def op(session):
             stmt = select(ReportRow).where(
-                func.coalesce(ReportRow.location, DEFAULT_CLUSTER_LOCATION)
+                func.coalesce(
+                    func.nullif(ReportRow.location, ""), DEFAULT_CLUSTER_LOCATION
+                )
                 == location
             )
             if need == DEFAULT_CLUSTER_NEED:

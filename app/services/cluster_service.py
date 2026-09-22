@@ -20,7 +20,12 @@ class ClusterService:
             
         clusters = []
         for key, group in groups.items():
-            location, need = key.split("::")
+            # The need is always the final segment (enum values never contain
+            # "::"), while a free-text location may legitimately contain "::".
+            # Splitting greedily on "::" would unpack the extra segments and
+            # crash with a ValueError; rsplit keeps the separator inside the
+            # location while the need stays the unambiguous last segment.
+            location, need = key.rsplit("::", 1)
             
             # Aggregate stats
             observations = len(group)

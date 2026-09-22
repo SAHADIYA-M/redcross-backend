@@ -200,7 +200,7 @@ class FusionService:
         candidate.status = FusionStatus.RESOLVED
         candidate.resolution = resolution
         candidate.reviewed_by = user_id
-        candidate.reviewed_at = datetime.utcnow().replace(tzinfo=timezone.utc)
+        candidate.reviewed_at = datetime.now(timezone.utc)
         
         self._repository.save(candidate)
         return candidate
