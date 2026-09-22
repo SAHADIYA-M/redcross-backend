@@ -21,6 +21,13 @@ class InMemoryReportRepository(ReportRepository):
     def get_all(self) -> list[Report]:
         return list(self._store.values())
 
+    def get_cluster_candidates(self, location: str, need: str) -> list[Report]:
+        return [
+            report
+            for report in self._store.values()
+            if report.cluster_location == location and report.cluster_need == need
+        ]
+
     def update(self, report_id: str, report: Report) -> Report | None:
         if report_id not in self._store:
             return None

@@ -5,6 +5,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.database import (
+    DatabaseIntegrityError,
+    DatabaseUnavailableError,
+)
+from app.location.errors import LocationError
+
 logger = logging.getLogger("app.errors")
 
 
@@ -39,6 +45,36 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=422,
             content={"detail": detail},
+        )
+
+    @app.exception_handler(DatabaseUnavailableError)
+    async def database_unavailable_handler(
+        request: Request, exc: DatabaseUnavailableError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Database unavailable"},
+        )
+
+    @app.exception_handler(DatabaseIntegrityError)
+    async def database_integrity_handler(
+        request: Request, exc: DatabaseIntegrityError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={"detail": "The record conflicts with existing data"},
+        )
+
+    @app.exception_handler(LocationError)
+    async def location_error_handler(
+        request: Request, exc: LocationError
+    ) -> JSONResponse:
+        # One consistent, generic message for every geocoding failure (missing
+        # provider, upstream outage, timeout, malformed provider data). Never
+        # leaks provider-internal details.
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Geocoder temporarily unavailable"},
         )
 
     @app.exception_handler(Exception)

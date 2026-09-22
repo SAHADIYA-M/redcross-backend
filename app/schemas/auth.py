@@ -10,17 +10,23 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.user import UserRole
+from app.schemas.lengths import MAX_FULL_NAME_LENGTH, MAX_PASSWORD_LENGTH
 
 
 class UserCreate(BaseModel):
-    """Body of POST /api/auth/register."""
+    """Body of POST /api/auth/register.
 
-    model_config = ConfigDict(extra="ignore")
+    Registration is public and can never carry a ``role``: an elevated role is
+    assigned only by the admin-only user-management layer, never by a
+    self-registering client (no privilege escalation). Unknown extra fields are
+    rejected instead of silently ignored.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     username: str = Field(min_length=1, max_length=64)
-    password: str = Field(min_length=8, max_length=128)
-    full_name: str | None = Field(default=None, max_length=128)
-    role: UserRole | None = Field(default=UserRole.VIEWER)
+    password: str = Field(min_length=8, max_length=MAX_PASSWORD_LENGTH)
+    full_name: str | None = Field(default=None, max_length=MAX_FULL_NAME_LENGTH)
 
     @field_validator("username")
     @classmethod
@@ -45,7 +51,7 @@ class UserUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    full_name: str | None = None
+    full_name: str | None = Field(default=None, max_length=MAX_FULL_NAME_LENGTH)
     role: UserRole | None = None
     is_active: bool | None = None
 
@@ -86,7 +92,7 @@ class LoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     username: str = Field(min_length=1)
-    password: str = Field(min_length=1)
+    password: str = Field(min_length=1, max_length=MAX_PASSWORD_LENGTH)
 
 
 class TokenResponse(BaseModel):

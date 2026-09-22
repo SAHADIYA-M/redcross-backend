@@ -27,6 +27,36 @@ class ReportRepository(ABC):
     def update(self, report_id: str, report: Report) -> Report | None:
         """Replace the stored report with the given one; None if not found."""
 
+    def search_reports(self, query) -> list[Report]:
+        """Return reports matching a validated ``SearchQuery`` via backend filters.
+
+        Optional pushdown hook: storage backends that can translate the
+        query's non-priority filters (text, need, verification status, status,
+        source, incident, time range) into native queries implement it. The
+        default signals "not supported", which makes the search service fall
+        back to ``get_all()`` + in-memory filtering so behavior is unchanged.
+        Bounding-box and priority filters are always handled by the service
+        layer, never here.
+        """
+        raise NotImplementedError
+
+    def get_cluster_candidates(self, location: str, need: str) -> list[Report]:
+        """Return reports belonging to the same fusion cluster (location+need).
+
+        A cluster is keyed by the normalized location (``Unknown Location``
+        when unset) and the report's first need (``General Request`` when it
+        has none). Only reports in the same cluster are comparable for
+        duplicate/conflict detection, so report creation can retrieve just the
+        candidates instead of scanning every report. Storage backends that can
+        push the lookup down (PostgreSQL) override this; the default keeps
+        behavior correct for every backend at the cost of a scan.
+        """
+        return [
+            report
+            for report in self.get_all()
+            if report.cluster_location == location and report.cluster_need == need
+        ]
+
 
 class PsycopgReportRepository:
     """PostgreSQL implementation of ReportRepository using psycopg (v3)."""

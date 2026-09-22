@@ -27,6 +27,13 @@ from app.location.schemas import LocationStatus
 from app.models.report import ReportStatus
 from app.priority.schemas import PriorityLevel
 from app.response_activity.schemas import ResponseStatus
+from app.schemas.lengths import (
+    DEFAULT_LIST_LIMIT,
+    MAX_INCIDENT_LENGTH,
+    MAX_LIST_LIMIT,
+    MAX_REPORT_ID_LENGTH,
+    MAX_SOURCE_LENGTH,
+)
 from app.search.schemas import MAX_PAGE_SIZE, SearchQuery
 from app.utils.validators import validate_time_range
 from app.verification.schemas import VerificationStatus
@@ -86,10 +93,12 @@ class MapQuery(BaseModel):
     )
     incident: str | None = Field(
         default=None,
+        max_length=MAX_INCIDENT_LENGTH,
         description="Case-insensitive substring match on the incident field.",
     )
     source: str | None = Field(
         default=None,
+        max_length=MAX_SOURCE_LENGTH,
         description="Case-insensitive substring match on the source field.",
     )
     start_time: datetime | None = Field(
@@ -129,6 +138,18 @@ class MapQuery(BaseModel):
     sort_order: MapSortOrder = Field(
         default=MapSortOrder.DESC,
         description="Sort direction: asc or desc.",
+    )
+    limit: int = Field(
+        default=DEFAULT_LIST_LIMIT,
+        ge=1,
+        le=MAX_LIST_LIMIT,
+        description="Maximum number of map points to return in this page "
+        "(1-1000, default 100).",
+    )
+    offset: int = Field(
+        default=0,
+        ge=0,
+        description="Number of map points to skip before this page.",
     )
 
     @property
@@ -204,9 +225,14 @@ class MapReportItem(BaseModel):
 
 
 class MapResponse(BaseModel):
-    """Map point response. An empty items list means simply that no report
-    has valid coordinates (or none match the filters); it never implies zero
-    humanitarian need - use the information-gap endpoint for that.
+    """Map point response, bounded to the requested page (``limit``/``offset``).
+
+    ``items`` holds the requested page of matching points; ``total`` is the
+    full number of mappable points matching the filters, so a client pages
+    through the complete set without ever materialising it in one response.
+    An empty items list means simply that no report has valid coordinates (or
+    none match the filters); it never implies zero humanitarian need - use the
+    information-gap endpoint for that.
     """
 
     items: list[MapReportItem] = Field(default_factory=list)
@@ -221,12 +247,24 @@ class ResponseMapQuery(BaseModel):
     bounds follow the API convention (naive datetimes interpreted as UTC).
     """
 
-    report_id: str | None = None
+    report_id: str | None = Field(default=None, max_length=MAX_REPORT_ID_LENGTH)
     need: NeedCategory | None = None
     response_status: ResponseStatus | None = None
-    source: str | None = None
+    source: str | None = Field(default=None, max_length=MAX_SOURCE_LENGTH)
     start_time: datetime | None = None
     end_time: datetime | None = None
+    limit: int = Field(
+        default=DEFAULT_LIST_LIMIT,
+        ge=1,
+        le=MAX_LIST_LIMIT,
+        description="Maximum number of map points to return in this page "
+        "(1-1000, default 100).",
+    )
+    offset: int = Field(
+        default=0,
+        ge=0,
+        description="Number of map points to skip before this page.",
+    )
 
     @model_validator(mode="after")
     def _validate_time_range(self) -> "ResponseMapQuery":
@@ -259,9 +297,11 @@ class ResponseMapItem(BaseModel):
 
 
 class ResponseMapResponse(BaseModel):
-    """Response activities with valid coordinates. An empty list means only
-    that no recorded activity is mappable (or none match); it never implies
-    no response activity exists anywhere."""
+    """Response activities with valid coordinates, bounded to the requested
+    page (``limit``/``offset``): ``items`` is one page, ``total`` the full
+    mappable count. An empty list means only that no recorded activity is
+    mappable (or none match); it never implies no response activity exists
+    anywhere."""
 
     items: list[ResponseMapItem] = Field(default_factory=list)
     total: int = Field(ge=0)

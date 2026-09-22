@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.lengths import MAX_REASON_LENGTH
 from app.schemas.priority import PriorityResponse
 from app.schemas.report import ReportResponse
 from app.verification.schemas import (
@@ -28,6 +29,7 @@ class VerifyRequest(BaseModel):
     )
     reason: str | None = Field(
         default=None,
+        max_length=MAX_REASON_LENGTH,
         description="Reason or comment for the action (required for REJECT).",
     )
     reviewer_id: str | None = Field(
@@ -72,6 +74,7 @@ class RequestAssessmentRequest(BaseModel):
 
     reason: str = Field(
         min_length=1,
+        max_length=MAX_REASON_LENGTH,
         description="Why the report needs further human assessment.",
     )
     reviewer_id: str | None = Field(

@@ -41,6 +41,37 @@ def _fast_hash_password(password: str) -> str:
 auth_service_module.hash_password = _fast_hash_password
 
 
+@pytest.fixture(autouse=True)
+def offline_container_fusion(monkeypatch):
+    """Keep the whole offline suite hermetic w.r.t. fusion analysis.
+
+    ``ReportService._run_fusion_analysis`` calls
+    ``app.core.container.get_fusion_service`` directly (a plain function call,
+    NOT a FastAPI dependency), so route-level ``dependency_overrides`` never
+    intercept the report-create path. With a real ``DATABASE_URL`` in the
+    environment the container therefore builds the live PostgreSQL fusion
+    service, making every offline report creation touch the live database.
+    That live-network dependence produced the Batch 4 transient failures.
+
+    This autouse fixture swaps the container's fusion service AND its fusion
+    repository for one shared in-memory pair for every test, so candidate
+    generation (create path), listing, detail and resolve all observe the same
+    offline data. Tests that need a specific fusion behavior override the
+    container function again via their own monkeypatch, which is applied after
+    this one and wins for that test.
+    """
+    import app.core.container as container_module
+
+    from app.repositories.fusion_repository import InMemoryFusionRepository
+    from app.services.fusion_service import FusionService
+
+    repository = InMemoryFusionRepository()
+    monkeypatch.setattr(
+        container_module, "get_fusion_service", lambda: FusionService(repository)
+    )
+    monkeypatch.setattr(container_module, "get_fusion_repository", lambda: repository)
+
+
 @pytest.fixture()
 def auth_setup():
     """Fresh seeded users (one per role) wired to the live app.
@@ -180,7 +211,9 @@ def app_client(auth_setup, admin_headers, storage_repos) -> TestClient:
     priority = PriorityService(reports)
     search = SearchService(reports, priority, location)
 
-    app.dependency_overrides[get_report_service] = lambda: ReportService(reports)
+    app.dependency_overrides[get_report_service] = (
+        lambda: ReportService(reports, audit, priority_service=priority)
+    )
     app.dependency_overrides[get_verification_service] = (
         lambda: VerificationService(reports, verifications, audit)
     )

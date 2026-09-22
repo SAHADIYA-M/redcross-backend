@@ -5,9 +5,23 @@ from __future__ import annotations
 import os
 from typing import Any
 
+NO_EVIDENCE_ANSWER = (
+    "No evidence found. No field reports matched the query, so I cannot "
+    "provide an evidence-backed answer."
+)
+
 
 class CopilotService:
-    """Service to answer queries using RAG over stored field reports."""
+    """Service to answer queries using RAG over stored field reports.
+
+    Every statement in the returned answer is grounded in retrieved reports:
+    - with zero citations the answer says no evidence was found and never
+      invents a location, facility or need;
+    - when Gemini is unavailable the fallback repeats ONLY what the citations
+      actually hold;
+    - a missing location name is reported as "unknown location", never as a
+      fabricated place name.
+    """
 
     def __init__(self, database_url: str, api_key: str | None = None) -> None:
         self.database_url = database_url
@@ -23,7 +37,6 @@ class CopilotService:
         query_vector = embed_text(query)
 
         citations = []
-        context_snippets = []
 
         # 2. Retrieve top-matching reports from database
         with psycopg.connect(self.database_url, prepare_threshold=None) as conn:
@@ -32,7 +45,7 @@ class CopilotService:
                 SELECT 
                     fr.report_id::text,
                     fr.raw_content,
-                    COALESCE(l.name, 'Govt UP School') AS location_name,
+                    l.name AS location_name,
                     1 - (fr.embedding <=> %s::vector) AS similarity
                 FROM field_reports fr
                 LEFT JOIN locations l ON fr.location_id = l.location_id
@@ -51,9 +64,19 @@ class CopilotService:
                         "similarity": round(similarity_val, 3),
                         "snippet": raw_content[:100] if raw_content else "",
                     })
-                    context_snippets.append(f"Report [{report_id[:8]}] at {loc_name}: {raw_content}")
 
-        # 3. Generate answer via Gemini or structured fallback
+        if not citations:
+            # No retrieved evidence: never fabricate an answer or a location.
+            return {"answer": NO_EVIDENCE_ANSWER, "citations": []}
+
+        context_snippets = [
+            f"Report [{citation['report_id'][:8]}] at "
+            f"{citation['location_name'] or 'unknown location'}: "
+            f"{citation['snippet']}"
+            for citation in citations
+        ]
+
+        # 3. Generate answer via Gemini or a grounded structured fallback
         answer = None
         if self.api_key:
             try:
@@ -72,13 +95,20 @@ class CopilotService:
                 if response and response.text:
                     answer = response.text.strip()
             except Exception:
-                pass
+                answer = None
 
         if not answer:
+            # Deterministic fallback grounded in the retrieved citations: it
+            # reproduces only report ids, locations and snippets actually found.
+            lines = [
+                f"- {citation['report_id']}: "
+                f"{citation['location_name'] or 'unknown location'}: "
+                f"{citation['snippet'] or 'no snippet'}"
+                for citation in citations
+            ]
             answer = (
-                f"Based on {len(citations)} verified field report(s):\n"
-                "- Water and shelter needs are reported near Govt UP School.\n"
-                "- Emergency relief supplies and medical assistance are requested."
+                f"Based on {len(citations)} field report(s):\n"
+                + "\n".join(lines)
             )
 
         return {

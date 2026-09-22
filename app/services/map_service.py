@@ -58,7 +58,12 @@ class MapService:
         items = [self._project(report, priorities.get(report.id)) for report in matched]
         items = [item for item in items if item is not None]
         ordered = self._sort(items, query)
-        return MapResponse(items=ordered, total=len(ordered))
+        # The response is bounded to the requested page while ``total`` keeps
+        # the full mappable count, so a client can page through a large map
+        # without a single request materialising every point.
+        total = len(ordered)
+        page = ordered[query.offset : query.offset + query.limit]
+        return MapResponse(items=page, total=total)
 
     def _project(
         self,

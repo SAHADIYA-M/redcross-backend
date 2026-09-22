@@ -94,10 +94,7 @@ class SearchService:
         if query.has_bounding_box and self._location_service is None:
             raise LocationSearchUnavailableError()
 
-        reports = self._repository.get_all()
-        candidates = [
-            report for report in reports if self._matches(report, query)
-        ]
+        candidates = self._candidates_for(query)
         priorities = self._priority_map(candidates)
         if self._has_priority_filter(query):
             candidates = [
@@ -106,6 +103,27 @@ class SearchService:
                 if self._matches_priority(report.id, query, priorities)
             ]
         return candidates, priorities
+
+    def _candidates_for(self, query: SearchQuery) -> list[Report]:
+        """Return the reports matching every non-priority filter of ``query``.
+
+        Without a bounding box the repository may push the filters down into
+        the database (``search_reports``). The bounding-box and all priority
+        filters are computed here in Python: priorities stay with the Phase 8
+        service and the geocoder stays with the Phase 5 location service.
+        """
+        if not query.has_bounding_box:
+            try:
+                pushed = self._repository.search_reports(query)
+                if pushed is not None:
+                    return pushed
+            except NotImplementedError:
+                pass
+        return [
+            report
+            for report in self._repository.get_all()
+            if self._matches(report, query)
+        ]
 
     # ------------------------------------------------------------- filtering
 

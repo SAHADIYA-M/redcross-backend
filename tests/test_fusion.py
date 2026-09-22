@@ -16,6 +16,37 @@ def test_fusion_resolve_requires_reviewer(app_client: TestClient, viewer_headers
     )
     assert response.status_code == 403
 
+
+def test_fusion_candidate_listing_requires_reviewer(
+    app_client: TestClient, viewer_headers: dict
+) -> None:
+    """The candidate list links report ids and similarity evidence: it is the
+    reviewer's workspace, not an open read for ANY authenticated user."""
+    app_client.headers.update(viewer_headers)
+    assert app_client.get("/api/fusion").status_code == 403
+
+
+def test_fusion_candidate_detail_requires_reviewer(
+    app_client: TestClient, viewer_headers: dict
+) -> None:
+    app_client.headers.update(viewer_headers)
+    assert app_client.get("/api/fusion/FC-0001").status_code == 403
+
+
+def test_fusion_candidate_listing_allows_reviewer(
+    app_client: TestClient, reviewer_headers: dict
+) -> None:
+    from app.api.fusion import get_fusion_repository
+    from app.repositories.fusion_repository import InMemoryFusionRepository
+
+    app.dependency_overrides[get_fusion_repository] = (
+        lambda: InMemoryFusionRepository()
+    )
+    app_client.headers.update(reviewer_headers)
+    response = app_client.get("/api/fusion")
+    assert response.status_code == 200
+    assert response.json() == []
+
 def test_fusion_candidate_generation(app_client: TestClient, admin_headers: dict) -> None:
     app_client.headers.update(admin_headers)
     # Create report 1

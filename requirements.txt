@@ -6,3 +6,5 @@ google-genai==2.24.0
 PyJWT==2.14.0
 bcrypt==5.0.0
 httpx==0.28.1
+sqlalchemy==2.0.43
+psycopg[binary]==3.3.6
