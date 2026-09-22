@@ -24,9 +24,32 @@ def _jaccard_similarity(text1: str, text2: str) -> float:
     union = len(t1 | t2)
     return intersection / union if union > 0 else 0.0
 
-def _get_candidate_id(type_: FusionType, r1: str, r2: str) -> str:
+def _candidate_pair_key(type_: FusionType, r1: str, r2: str) -> frozenset[str]:
+    """Natural identity of a candidate within a cluster: type + report pair.
+
+    A pair of reports can be BOTH a possible duplicate and a possible conflict
+    (e.g. near-identical text AND CRITICAL-vs-LOW severity), so the type is
+    part of the identity: deduping by the pair alone would silently drop the
+    second candidate of the same pair.
+    """
+    return frozenset((type_, r1, r2))
+
+
+def _get_candidate_id(type_: FusionType, cluster_id: str, r1: str, r2: str) -> str:
+    """Deterministic candidate id scoped to (cluster, type, report pair).
+
+    The cluster id is part of the hash material so candidate ids are globally
+    unique per (cluster, type, pair): analyzing the same pair under two
+    different clusters produces two distinct ids and never clobbers the first
+    cluster's candidate in id-keyed storage. The type is part of the material
+    too, so a pair that is both a duplicate and a conflict yields two distinct
+    candidates instead of one overwriting the other (every possible pair of
+    reports shares exactly one cluster, but candidate identity must not depend
+    on that invariant staying true forever).
+    """
     sorted_ids = sorted([r1, r2])
-    return f"FUS-{type_.value[:3]}-{hashlib.md5((sorted_ids[0] + sorted_ids[1]).encode()).hexdigest()[:8].upper()}"
+    material = cluster_id + sorted_ids[0] + sorted_ids[1] + type_.value
+    return f"FUS-{type_.value[:3]}-{hashlib.md5(material.encode()).hexdigest()[:8].upper()}"
 
 class FusionService:
     def __init__(self, repository_or_db_url: FusionRepository | str | None = None):
@@ -100,7 +123,17 @@ class FusionService:
         if len(reports) < 2:
             return
 
-        all_candidates = {c.id: c for c in self._repository.get_all()}
+        # Only this cluster's existing candidates can collide with a candidate
+        # we might create. Loading the whole table here would turn every report
+        # creation into a full-table scan of the (potentially quadratic)
+        # fusion_candidates table.
+        existing = self._repository.get_by_cluster(cluster_id)
+        existing_ids = {candidate.id for candidate in existing}
+        existing_keys = {
+            _candidate_pair_key(candidate.type, *sorted(candidate.report_ids))
+            for candidate in existing
+            if len(candidate.report_ids) == 2
+        }
 
         for r1, r2 in combinations(reports, 2):
             # Duplicate checks
@@ -116,8 +149,9 @@ class FusionService:
                     duplicate_reasons.append("same reporter submitted both reports within 1 hour")
 
             if duplicate_reasons:
-                cand_id = _get_candidate_id(FusionType.POSSIBLE_DUPLICATE, r1.id, r2.id)
-                if cand_id not in all_candidates:
+                cand_id = _get_candidate_id(FusionType.POSSIBLE_DUPLICATE, cluster_id, r1.id, r2.id)
+                pair_key = _candidate_pair_key(FusionType.POSSIBLE_DUPLICATE, r1.id, r2.id)
+                if cand_id not in existing_ids and pair_key not in existing_keys:
                     cand = FusionCandidate(
                         id=cand_id,
                         type=FusionType.POSSIBLE_DUPLICATE,
@@ -127,7 +161,8 @@ class FusionService:
                         similarity=similarity
                     )
                     self._repository.save(cand)
-                    all_candidates[cand_id] = cand
+                    existing_ids.add(cand_id)
+                    existing_keys.add(pair_key)
 
             # Conflict checks
             conflict_reasons = []
@@ -143,8 +178,9 @@ class FusionService:
                     conflict_reasons.append("One report states affected population > 100 while another states < 10")
 
             if conflict_reasons:
-                cand_id = _get_candidate_id(FusionType.POSSIBLE_CONFLICT, r1.id, r2.id)
-                if cand_id not in all_candidates:
+                cand_id = _get_candidate_id(FusionType.POSSIBLE_CONFLICT, cluster_id, r1.id, r2.id)
+                pair_key = _candidate_pair_key(FusionType.POSSIBLE_CONFLICT, r1.id, r2.id)
+                if cand_id not in existing_ids and pair_key not in existing_keys:
                     cand = FusionCandidate(
                         id=cand_id,
                         type=FusionType.POSSIBLE_CONFLICT,
@@ -153,7 +189,8 @@ class FusionService:
                         reason="Possible conflict: " + " AND ".join(conflict_reasons)
                     )
                     self._repository.save(cand)
-                    all_candidates[cand_id] = cand
+                    existing_ids.add(cand_id)
+                    existing_keys.add(pair_key)
 
     def resolve(self, candidate_id: str, resolution: FusionResolution, user_id: str) -> FusionCandidate | None:
         candidate = self._repository.get_by_id(candidate_id)

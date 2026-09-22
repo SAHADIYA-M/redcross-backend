@@ -9,11 +9,12 @@ normal registered user can never escalate their own role.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import get_auth_service, require_roles
 from app.models.user import User, UserRole
 from app.schemas.auth import UserResponse, UserUpdate
+from app.schemas.lengths import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT
 from app.services.auth_service import (
     AuthService,
     UserNotFoundError,
@@ -30,9 +31,14 @@ _require_admin = require_roles(UserRole.ADMIN)
 def list_users(
     _admin: Annotated[User, Depends(_require_admin)],
     service: Annotated[AuthService, Depends(get_auth_service)],
+    limit: int = Query(default=DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT),
+    offset: int = Query(default=0, ge=0),
 ) -> list[UserResponse]:
-    """List every registered user (ADMIN only)."""
-    return [UserResponse.model_validate(user) for user in service.list_users()]
+    """List every registered user (ADMIN only), bounded page of ``limit``."""
+    return [
+        UserResponse.model_validate(user)
+        for user in service.list_users()[offset : offset + limit]
+    ]
 
 
 @router.patch("/{user_id}", response_model=UserResponse)

@@ -27,10 +27,7 @@ from app.schemas.verification import (
     VerifyRequest,
     VerifyResponse,
 )
-from app.services.priority_service import (
-    InsufficientPriorityDataError,
-    PriorityService,
-)
+from app.services.priority_service import PriorityService
 from app.services.report_service import ReportNotFoundError
 from app.verification.schemas import (
     VerificationAction,
@@ -83,6 +80,11 @@ _TARGET_STATUS: dict[VerificationAction, VerificationStatus] = {
     VerificationAction.MARK_UNCERTAIN: VerificationStatus.UNCERTAIN,
 }
 
+# List-typed claims on the domain model: a reviewer clears one by submitting
+# null, which normalizes to the empty list the Report model uses for "no
+# claim" (never to an invalid null).
+_LIST_CLAIM_FIELDS = frozenset({"needs", "vulnerability", "available_needs"})
+
 
 class InvalidVerificationTransitionError(Exception):
     """Raised when the report's current status forbids the requested action."""
@@ -134,10 +136,18 @@ class VerificationService:
         report_repository: ReportRepository,
         verification_repository: VerificationRepository,
         audit_repository: AuditRepository,
+        priority_service: PriorityService | None = None,
     ) -> None:
         self._report_repository = report_repository
         self._verification_repository = verification_repository
         self._audit_repository = audit_repository
+        # The Phase 8 service is injected so verification reuses the exact
+        # priority instance the rest of the app uses (including its result
+        # store, which the PostgreSQL stack wires). The fallback keeps the
+        # service constructible for tests without a store.
+        self._priority_service = priority_service or PriorityService(
+            report_repository
+        )
 
     def verify(self, report_id: str, data: VerifyRequest) -> VerifyResponse:
         """Apply a verification action and return the updated state."""
@@ -240,6 +250,13 @@ class VerificationService:
         edits = data.edits.model_dump(exclude_unset=True) if data.edits else {}
         changes: dict[str, dict[str, object]] = {}
         for field, new_value in edits.items():
+            # List-typed claims are stored as empty lists, never null: a
+            # reviewer clearing a list claim (needs/vulnerability/
+            # available_needs) submits null, which the domain model renders as
+            # "no claim", i.e. an empty list. Applying null verbatim would
+            # fail Report validation and surface a 500 instead of a clean edit.
+            if new_value is None and field in _LIST_CLAIM_FIELDS:
+                new_value = []
             old_value = getattr(report, field)
             if old_value != new_value:
                 changes[field] = {"old": old_value, "new": new_value}
@@ -325,12 +342,12 @@ class VerificationService:
         A reviewer can never set a score directly; the backend derives it. When
         the edited report no longer carries usable priority input, the result
         is invalidated (None) instead of forcing a value.
+
+        The recalculation runs through the shared ``PriorityService`` instance,
+        so the recomputed result is persisted to the same result store the
+        priority API and report-update path use (identity, not a fresh
+        store-less copy).
         """
         if action != VerificationAction.EDIT:
             return None
-        try:
-            return PriorityService(self._report_repository).calculate_for_report(
-                report_id
-            )
-        except InsufficientPriorityDataError:
-            return None
+        return self._priority_service.recalculate_for_report(report_id)

@@ -324,3 +324,31 @@ class PriorityService:
         if self._result_store is not None:
             self._result_store.save(result)
         return response
+
+    def recalculate_for_report(self, report_id: str) -> PriorityResponse | None:
+        """Recompute and persist the stored priority result for a report.
+
+        Reused by the report-update path so an edit that changes priority input
+        can never leave a stale stored result behind. When the report no longer
+        carries usable priority input the stored result is invalidated
+        (removed) instead of being forced to a fabricated value.
+        """
+        try:
+            return self.calculate_for_report(report_id)
+        except InsufficientPriorityDataError:
+            self.invalidate_for_report(report_id)
+            return None
+
+    def invalidate_for_report(self, report_id: str) -> None:
+        """Drop any stored priority result for a report that lost its input.
+
+        The result store is optional (only the PostgreSQL stack persists
+        results); when it cannot delete, invalidation is a no-op and the next
+        backend calculation remains the single source of truth.
+        """
+        store = self._result_store
+        if store is None:
+            return
+        delete = getattr(store, "delete_by_report", None)
+        if delete is not None:
+            delete(report_id)

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
+from contextlib import asynccontextmanager
 
 from app.api.ai import router as ai_router
 from app.api.analytics import router as analytics_router
@@ -9,7 +10,6 @@ from app.api.auth import router as auth_router
 from app.api.fusion import router as fusion_router
 from app.api.clusters import router as clusters_router
 from app.api.conflicts import router as conflicts_router
-from app.api.deps import get_auth_service
 from app.api.duplicates import router as duplicates_router
 from app.api.errors import register_exception_handlers
 from app.api.locations import router as locations_router
@@ -23,22 +23,36 @@ from app.api.search import router as search_router
 from app.api.users import router as users_router
 from app.api.verification import router as verification_router
 from app.api.verification import verification_list_router
+import app.core.bootstrap as bootstrap_module
 from app.core.config import settings
-from app.core.database import DatabaseUnavailableError, check_database_health, get_engine
-from app.models.db_models import create_all
+from app.core.database import check_database_health
 from app.schemas.response import HealthResponse, MessageResponse
-from app.services.auth_service import seed_development_admin
 
 logger = logging.getLogger("app.main")
 
-if settings.environment == "production":
+if settings.environment != "development":
+    # Any non-development environment must fail closed when no real JWT
+    # secret is configured (production, staging, ...). Development keeps the
+    # development-only fallback so local runs need no secret.
     settings.effective_jwt_secret_key()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Database bootstrap (schema creation, schema readiness, development-admin
+    # seed) runs here — once per process startup — instead of as an unsafe
+    # import-time side effect. It is a safe no-op unless the operator enabled
+    # the corresponding startup work.
+    bootstrap_module.run_startup_bootstrap()
+    yield
+
 
 app = FastAPI(
     title=settings.app_name,
     description="Backend for the AI-Assisted Humanitarian Needs Assessment & "
     "Operational Intelligence system.",
     version=settings.app_version,
+    lifespan=lifespan,
 )
 
 app.include_router(reports_router)
@@ -70,32 +84,6 @@ app.add_middleware(
 )
 
 register_exception_handlers(app)
-
-# Optional bootstrap: when explicitly enabled (DB_CREATE_TABLES_ON_STARTUP=true
-# AND a DATABASE_URL is configured), create any missing Phase 15 tables via the
-# additive ORM ``create_all``. Never enabled automatically, and never used as a
-# substitute for the team's migration workflow. A database that is currently
-# unreachable degrades gracefully instead of crashing startup.
-if settings.db_create_tables_on_startup:
-    if settings.database_url.strip() and settings.environment != "production":
-        try:
-            create_all(get_engine())
-        except DatabaseUnavailableError:
-            logger.warning("Skipping table bootstrap: database unavailable")
-
-# Development-only seed: creates a single ADMIN account, but ONLY when
-# SEED_DEV_ADMIN=true AND the environment is not production. Credentials come
-# from the environment and are documented as development-only. When a database
-# is configured but currently unreachable the seed is skipped gracefully so
-# startup never crashes just because the database is down; real programming
-# errors still propagate.
-if settings.environment != "production" and settings.seed_dev_admin:
-    try:
-        seed_development_admin(get_auth_service())
-    except DatabaseUnavailableError:
-        logger.warning(
-            "Skipping development admin seed: database unavailable"
-        )
 
 
 @app.get("/", response_model=MessageResponse)

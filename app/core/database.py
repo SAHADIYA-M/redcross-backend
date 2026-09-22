@@ -91,15 +91,29 @@ def _pool_options() -> dict:
 
 
 def _connect_timeout_kwargs(url: str, seconds: int) -> dict:
-    """Connection-level timeout for PostgreSQL (bounded fail, never a hang).
+    """Connection-level options for PostgreSQL (bounded fail, pooler-safe).
 
     SQLite (offline tests) has no TCP connect step, so only PostgreSQL URLs
-    get an explicit driver-level ``connect_timeout``. This keeps startup and
-    request paths from blocking indefinitely when a configured database is
-    unreachable.
+    get driver-level options:
+
+    - ``connect_timeout`` keeps startup and request paths from blocking
+      indefinitely when a configured database is unreachable;
+    - ``prepare_threshold=None`` disables psycopg's server-side auto-prepared
+      statements. The project's other psycopg code paths already pass
+      ``prepare_threshold=None``: against a session-mode pooler (Supabase
+      PgBouncer) a reused backend session keeps its prepared statement names
+      (``_pg3_0``, ...), so a fresh connection's counter restart collides with
+      ``DuplicatePreparedStatement`` and surfaces as an intermittent
+      "Database unavailable". Disabling auto-prepare removes that class
+      entirely at no cost for this workload.
     """
     if url.startswith("postgres") or url.startswith("postgresql"):
-        return {"connect_args": {"connect_timeout": seconds}}
+        return {
+            "connect_args": {
+                "connect_timeout": seconds,
+                "prepare_threshold": None,
+            }
+        }
     return {}
 
 

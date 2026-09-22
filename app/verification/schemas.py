@@ -2,11 +2,19 @@
 
 from datetime import datetime
 from enum import Enum
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.ai.schemas import NeedCategory, SeverityLevel
 from app.conflicts.schemas import InfrastructureStatus
+from app.schemas.lengths import (
+    MAX_INCIDENT_LENGTH,
+    MAX_LIST_ITEMS,
+    MAX_LOCATION_LENGTH,
+    MAX_TIME_SENSITIVITY_LENGTH,
+    MAX_VULNERABILITY_ITEM_LENGTH,
+)
 
 
 class VerificationStatus(str, Enum):
@@ -55,7 +63,9 @@ class VerificationEdits(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     needs: list[NeedCategory] | None = Field(
-        default=None, description="Corrected need categories."
+        default=None,
+        max_length=MAX_LIST_ITEMS,
+        description="Corrected need categories.",
     )
     severity: SeverityLevel | None = Field(
         default=None, description="Corrected severity claim."
@@ -63,19 +73,31 @@ class VerificationEdits(BaseModel):
     affected_population: int | None = Field(
         default=None, ge=0, description="Corrected affected population count."
     )
-    vulnerability: list[str] | None = Field(
-        default=None, description="Corrected vulnerable groups."
+    vulnerability: list[
+        Annotated[str, StringConstraints(max_length=MAX_VULNERABILITY_ITEM_LENGTH)]
+    ] | None = Field(
+        default=None,
+        max_length=MAX_LIST_ITEMS,
+        description="Corrected vulnerable groups.",
     )
     time_sensitivity: str | None = Field(
-        default=None, description="Corrected time-sensitivity statement."
+        default=None,
+        max_length=MAX_TIME_SENSITIVITY_LENGTH,
+        description="Corrected time-sensitivity statement.",
     )
-    location: str | None = Field(default=None, description="Corrected location.")
-    incident: str | None = Field(default=None, description="Corrected incident.")
+    location: str | None = Field(
+        default=None, max_length=MAX_LOCATION_LENGTH, description="Corrected location."
+    )
+    incident: str | None = Field(
+        default=None, max_length=MAX_INCIDENT_LENGTH, description="Corrected incident."
+    )
     infrastructure_status: InfrastructureStatus | None = Field(
         default=None, description="Corrected infrastructure/service status."
     )
     available_needs: list[NeedCategory] | None = Field(
-        default=None, description="Corrected available needs."
+        default=None,
+        max_length=MAX_LIST_ITEMS,
+        description="Corrected available needs.",
     )
 
 

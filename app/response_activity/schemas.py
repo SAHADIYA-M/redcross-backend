@@ -28,6 +28,15 @@ from pydantic import BaseModel, Field, model_validator
 from app.ai.schemas import NeedCategory
 from app.location.schemas import LocationStatus
 from app.priority.schemas import PriorityLevel
+from app.schemas.lengths import (
+    DEFAULT_LIST_LIMIT,
+    MAX_ACTIVITY_LENGTH,
+    MAX_LIST_LIMIT,
+    MAX_LOCATION_LENGTH,
+    MAX_NOTES_LENGTH,
+    MAX_REASON_LENGTH,
+    MAX_SOURCE_LENGTH,
+)
 from app.utils.validators import validate_time_range
 from app.verification.schemas import VerificationStatus
 
@@ -125,12 +134,12 @@ class CreateResponse(BaseModel):
 
     report_id: str = Field(min_length=1)
     need: NeedCategory | None = None
-    activity: str = Field(min_length=1)
+    activity: str = Field(min_length=1, max_length=MAX_ACTIVITY_LENGTH)
     response_status: ResponseStatus = ResponseStatus.PLANNED
     timestamp: datetime | None = None
-    location: str | None = None
-    source: str | None = None
-    notes: str | None = None
+    location: str | None = Field(default=None, max_length=MAX_LOCATION_LENGTH)
+    source: str | None = Field(default=None, max_length=MAX_SOURCE_LENGTH)
+    notes: str | None = Field(default=None, max_length=MAX_NOTES_LENGTH)
     affected_population: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
@@ -153,11 +162,13 @@ class UpdateResponse(BaseModel):
     """
 
     response_status: ResponseStatus | None = None
-    activity: str | None = Field(default=None, min_length=1)
-    notes: str | None = None
+    activity: str | None = Field(
+        default=None, min_length=1, max_length=MAX_ACTIVITY_LENGTH
+    )
+    notes: str | None = Field(default=None, max_length=MAX_NOTES_LENGTH)
     affected_population: int | None = Field(default=None, ge=0)
     actor_id: str | None = None
-    reason: str | None = None
+    reason: str | None = Field(default=None, max_length=MAX_REASON_LENGTH)
 
     @model_validator(mode="after")
     def _require_change(self) -> "UpdateResponse":
@@ -189,6 +200,8 @@ class ResponseQuery(BaseModel):
     location: str | None = None
     start_time: datetime | None = None
     end_time: datetime | None = None
+    limit: int = Field(default=DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT)
+    offset: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def _validate_time_range(self) -> "ResponseQuery":

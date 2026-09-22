@@ -40,6 +40,23 @@ class ReportRepository(ABC):
         """
         raise NotImplementedError
 
+    def get_cluster_candidates(self, location: str, need: str) -> list[Report]:
+        """Return reports belonging to the same fusion cluster (location+need).
+
+        A cluster is keyed by the normalized location (``Unknown Location``
+        when unset) and the report's first need (``General Request`` when it
+        has none). Only reports in the same cluster are comparable for
+        duplicate/conflict detection, so report creation can retrieve just the
+        candidates instead of scanning every report. Storage backends that can
+        push the lookup down (PostgreSQL) override this; the default keeps
+        behavior correct for every backend at the cost of a scan.
+        """
+        return [
+            report
+            for report in self.get_all()
+            if report.cluster_location == location and report.cluster_need == need
+        ]
+
 
 class PsycopgReportRepository:
     """PostgreSQL implementation of ReportRepository using psycopg (v3)."""

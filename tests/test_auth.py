@@ -92,7 +92,7 @@ def role_client(auth_setup):
     response_repository = InMemoryResponseRepository()
 
     app.dependency_overrides[get_report_service] = (
-        lambda: ReportService(report_repository)
+        lambda: ReportService(report_repository, audit_repository)
     )
     app.dependency_overrides[get_verification_service] = (
         lambda: VerificationService(

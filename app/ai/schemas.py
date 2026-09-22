@@ -2,6 +2,14 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator
 
+MAX_AI_LOCATION_LENGTH = 500
+MAX_AI_INCIDENT_LENGTH = 500
+MAX_AI_TIME_SENSITIVITY_LENGTH = 1_000
+MAX_AI_LIST_ITEMS = 50
+MAX_AI_EVIDENCE_ITEM_LENGTH = 2_000
+MAX_AI_NEEDS = 11
+MAX_AI_AFFECTED_POPULATION = 1_000_000_000
+
 
 class NeedCategory(str, Enum):
     """Allowed humanitarian need categories."""
@@ -36,14 +44,20 @@ class AIExtraction(BaseModel):
     The final priority is NOT decided here — it is computed in a later phase.
     """
 
-    incident: str | None = None
-    location: str | None = None
-    needs: list[NeedCategory] = Field(default_factory=list)
+    incident: str | None = Field(default=None, max_length=MAX_AI_INCIDENT_LENGTH)
+    location: str | None = Field(default=None, max_length=MAX_AI_LOCATION_LENGTH)
+    needs: list[NeedCategory] = Field(default_factory=list, max_length=MAX_AI_NEEDS)
     severity: SeverityLevel | None = None
-    affected_population: int | None = None
-    vulnerability: list[str] = Field(default_factory=list)
-    time_sensitivity: str | None = None
-    evidence: list[str] = Field(default_factory=list)
+    affected_population: int | None = Field(
+        default=None, le=MAX_AI_AFFECTED_POPULATION
+    )
+    vulnerability: list[str] = Field(
+        default_factory=list, max_length=MAX_AI_LIST_ITEMS
+    )
+    time_sensitivity: str | None = Field(
+        default=None, max_length=MAX_AI_TIME_SENSITIVITY_LENGTH
+    )
+    evidence: list[str] = Field(default_factory=list, max_length=MAX_AI_LIST_ITEMS)
 
     @field_validator("incident", "location", "time_sensitivity", mode="after")
     @classmethod
@@ -81,8 +95,13 @@ class AIExtraction(BaseModel):
         cleaned: list[str] = []
         for item in values:
             stripped = item.strip()
-            if stripped and stripped not in cleaned:
-                cleaned.append(stripped)
+            if not stripped or stripped in cleaned:
+                continue
+            if len(stripped) > MAX_AI_EVIDENCE_ITEM_LENGTH:
+                raise ValueError(
+                    "list items must not exceed maximum length"
+                )
+            cleaned.append(stripped)
         return cleaned
 
     @field_validator("needs", mode="after")

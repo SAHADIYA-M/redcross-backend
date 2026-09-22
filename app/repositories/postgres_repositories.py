@@ -43,7 +43,12 @@ from app.models.fusion import (
     FusionStatus,
     FusionType,
 )
-from app.models.report import Report, ReportStatus
+from app.models.report import (
+    DEFAULT_CLUSTER_LOCATION,
+    DEFAULT_CLUSTER_NEED,
+    Report,
+    ReportStatus,
+)
 from app.models.user import User, UserRole
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.fusion_repository import FusionRepository
@@ -296,10 +301,10 @@ class PostgresReportRepository(ReportRepository):
         def op(session):
             stmt = select(ReportRow).order_by(ReportRow.created_at)
             if query.q:
-                # SQLite's LIKE does not default to a backslash escape (Postgres
-                # does), so the explicit ESCAPE keeps both backends faithful.
                 stmt = stmt.where(
-                    ReportRow.original_text.ilike(_like_contains(query.q), escape="\\")
+                    ReportRow.original_text.ilike(
+                        _like_contains(query.q), escape=_ILIKE_ESCAPE
+                    )
                 )
             if query.need:
                 need_values = [need.value for need in query.need]
@@ -316,21 +321,75 @@ class PostgresReportRepository(ReportRepository):
             if query.status is not None:
                 stmt = stmt.where(ReportRow.status == query.status.value)
             if query.location is not None:
-                stmt = stmt.where(ReportRow.location.ilike(_like_contains(query.location)))
+                stmt = stmt.where(
+                    ReportRow.location.ilike(
+                        _like_contains(query.location), escape=_ILIKE_ESCAPE
+                    )
+                )
             if query.location_status is not None:
                 stmt = stmt.where(
                     ReportRow.location_status == query.location_status.value
                 )
             if query.incident is not None:
-                stmt = stmt.where(ReportRow.incident.ilike(_like_contains(query.incident)))
+                stmt = stmt.where(
+                    ReportRow.incident.ilike(
+                        _like_contains(query.incident), escape=_ILIKE_ESCAPE
+                    )
+                )
             if query.source is not None:
-                stmt = stmt.where(ReportRow.source.ilike(_like_contains(query.source)))
+                stmt = stmt.where(
+                    ReportRow.source.ilike(
+                        _like_contains(query.source), escape=_ILIKE_ESCAPE
+                    )
+                )
             if query.start_time is not None:
                 stmt = stmt.where(ReportRow.timestamp >= as_utc(query.start_time))
             if query.end_time is not None:
                 stmt = stmt.where(ReportRow.timestamp <= as_utc(query.end_time))
             rows = session.scalars(stmt).all()
             ids = [r.report_id for r in rows]
+            all_needs = _read_needs(session, ids)
+            return [
+                _report_from_row(row, all_needs.get(row.report_id, []))
+                for row in rows
+            ]
+
+        return _run(self._factory, op)
+
+    def get_cluster_candidates(self, location: str, need: str) -> list[Report]:
+        """Fetch only the reports in the requested fusion cluster (no full scan).
+
+        Matches on the normalized cluster key: ``coalesce(location,
+        'Unknown Location')`` and the first need (``ReportNeedRow.position ==
+        0``) or the no-need fallback — the exact semantics of
+        :attr:`Report.cluster_location` / :attr:`Report.cluster_need`.
+        """
+        def op(session):
+            stmt = select(ReportRow).where(
+                func.coalesce(ReportRow.location, DEFAULT_CLUSTER_LOCATION)
+                == location
+            )
+            if need == DEFAULT_CLUSTER_NEED:
+                stmt = stmt.where(
+                    ~exists(
+                        select(1).where(
+                            ReportNeedRow.report_id == ReportRow.report_id
+                        )
+                    )
+                )
+            else:
+                stmt = stmt.where(
+                    exists(
+                        select(1)
+                        .where(
+                            ReportNeedRow.report_id == ReportRow.report_id
+                        )
+                        .where(ReportNeedRow.position == 0)
+                        .where(ReportNeedRow.need == need)
+                    )
+                )
+            rows = session.scalars(stmt).all()
+            ids = [row.report_id for row in rows]
             all_needs = _read_needs(session, ids)
             return [
                 _report_from_row(row, all_needs.get(row.report_id, []))
@@ -346,6 +405,12 @@ def _like_contains(value: str) -> str:
         value.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
     )
     return f"%{escaped}%"
+
+
+# One escape character for every ILIKE call. PostgreSQL defaults to backslash,
+# but SQLite does not; passing the ESCAPE explicitly keeps both backends
+# faithful so ``%`` and ``_`` in user text are always literal.
+_ILIKE_ESCAPE = "\\"
 
 
 def _write_needs(session, report_id: str, needs: list[NeedCategory]) -> None:
@@ -690,6 +755,17 @@ class PostgresFusionRepository(FusionRepository):
 
         _run(self._factory, op)
 
+    def get_by_cluster(self, cluster_id: str) -> list[FusionCandidate]:
+        def op(session):
+            rows = session.scalars(
+                select(FusionCandidateRow).where(
+                    FusionCandidateRow.cluster_id == cluster_id
+                )
+            ).all()
+            return [_fusion_from_row(row) for row in rows]
+
+        return _run(self._factory, op)
+
     def get_all(self) -> list[FusionCandidate]:
         def op(session):
             rows = session.scalars(
@@ -787,6 +863,22 @@ class PostgresPriorityResultRepository:
             )
 
         return _run(self._factory, op)
+
+    def delete_by_report(self, report_id: str) -> None:
+        """Remove the stored result for a report that lost its priority input.
+
+        Invalidation, not a mutation: no replacement value is fabricated. Only
+        the backend calls this (after a report edit); there is no route a
+        client could use to delete or set a score.
+        """
+        def op(session):
+            session.execute(
+                delete(PriorityResultRow).where(
+                    PriorityResultRow.report_id == report_id
+                )
+            )
+
+        _run(self._factory, op)
 
 
 __all__ = [

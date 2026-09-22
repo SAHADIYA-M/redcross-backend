@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 
 from app.core.config import settings
 from app.core.security import hash_password, verify_password
-from app.models.user import User, UserRole
+from app.models.user import PUBLIC_REGISTRATION_ROLES, User, UserRole
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import LoginRequest, UserCreate, UserUpdate
 
@@ -162,10 +162,19 @@ class AuthService:
         return stored
 
     def _default_public_role(self) -> UserRole:
+        """Return the configured public role, restricted to the allow-list.
+
+        Even if a bad configuration slipped past ``Settings`` validation, a
+        privileged role can never be granted through public registration:
+        anything outside PUBLIC_REGISTRATION_ROLES falls back to VIEWER.
+        """
         try:
-            return UserRole(settings.public_register_role)
+            role = UserRole(settings.public_register_role)
         except ValueError:
             return UserRole.VIEWER
+        if role not in PUBLIC_REGISTRATION_ROLES:
+            return UserRole.VIEWER
+        return role
 
 
 def seed_development_admin(service: AuthService) -> None:

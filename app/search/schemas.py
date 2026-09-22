@@ -25,6 +25,12 @@ from app.ai.schemas import NeedCategory
 from app.location.schemas import LocationStatus
 from app.models.report import ReportStatus
 from app.priority.schemas import PriorityLevel
+from app.schemas.lengths import (
+    MAX_INCIDENT_LENGTH,
+    MAX_LOCATION_LENGTH,
+    MAX_QUERY_LENGTH,
+    MAX_SOURCE_LENGTH,
+)
 from app.utils.validators import validate_bbox, validate_time_range
 from app.verification.schemas import VerificationStatus
 
@@ -60,6 +66,7 @@ class SearchQuery(BaseModel):
 
     q: str | None = Field(
         default=None,
+        max_length=MAX_QUERY_LENGTH,
         description=(
             "Case-insensitive substring search against the original report "
             "text (the preserved source evidence)."
@@ -94,6 +101,7 @@ class SearchQuery(BaseModel):
     )
     location: str | None = Field(
         default=None,
+        max_length=MAX_LOCATION_LENGTH,
         description=(
             "Case-insensitive substring match on the raw location text. "
             "Never matched by guessed coordinates."
@@ -135,10 +143,12 @@ class SearchQuery(BaseModel):
     )
     incident: str | None = Field(
         default=None,
+        max_length=MAX_INCIDENT_LENGTH,
         description="Case-insensitive substring match on the incident field.",
     )
     source: str | None = Field(
         default=None,
+        max_length=MAX_SOURCE_LENGTH,
         description="Case-insensitive substring match on the source field.",
     )
     sort_by: SearchSortField = Field(

@@ -65,7 +65,9 @@ class ResponseMapService:
             key=lambda item: (as_utc(item.timestamp), item.response_id),
             reverse=True,
         )
-        return ResponseMapResponse(items=items, total=len(items))
+        total = len(items)
+        page = items[query.offset : query.offset + query.limit]
+        return ResponseMapResponse(items=page, total=total)
 
     def _project(self, activity: ResponseActivity) -> ResponseMapItem | None:
         """Build a map point for an activity, or None if it is not mappable."""

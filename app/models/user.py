@@ -35,6 +35,12 @@ REVIEWER_ROLES = frozenset({UserRole.REVIEWER, UserRole.ADMIN})
 # Roles allowed to create or update response activities.
 RESPONDER_ROLES = frozenset({UserRole.RESPONDER, UserRole.ADMIN})
 
+# Explicit allow-list for public self-registration. Only the read-only VIEWER
+# role is public; every operational role (ADMIN/REVIEWER/ASSESSOR/RESPONDER)
+# must be assigned by an administrator. A public client can therefore never
+# escalate privileges through registration.
+PUBLIC_REGISTRATION_ROLES = frozenset({UserRole.VIEWER})
+
 
 class User(BaseModel):
     """Backend representation of an authenticated API user.

@@ -1,7 +1,7 @@
 from app.verification.service import VerificationService
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import get_current_active_user, require_roles
 from app.core.container import (
@@ -9,6 +9,7 @@ from app.core.container import (
     get_verification_service,
 )
 from app.models.user import REVIEWER_ROLES, User
+from app.schemas.lengths import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT
 from app.schemas.verification import (
     AssessmentRequestResponse,
     RequestAssessmentRequest,
@@ -113,15 +114,18 @@ def list_verifications(
     report_id: str | None = None,
     verification_status: VerificationStatus | None = None,
     action: VerificationAction | None = None,
+    limit: int = Query(default=DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT),
+    offset: int = Query(default=0, ge=0),
 ) -> list[VerificationRecord]:
     """List verification records, newest first (authenticated users only).
 
     Supports optional filtering by report ID, verification status and
-    verification action. Returns structured JSON suitable for a future
-    responder dashboard.
+    verification action. Results are bounded by ``limit`` (1-1000, default
+    100) with ``offset`` paging. Returns structured JSON suitable for a
+    future responder dashboard.
     """
     return service.list_verifications(
         report_id=report_id,
         status=verification_status,
         action=action,
-    )
+    )[offset : offset + limit]

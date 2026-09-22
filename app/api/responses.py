@@ -71,10 +71,12 @@ def list_responses(
     """List response activities, newest first, with optional filters.
 
     Filters are combined with AND: report_id, need, response_status, source,
-    location, start_time, end_time. An empty list means no recorded activity
-    matches; it never means no response exists.
+    location, start_time, end_time. Results are bounded by ``limit``
+    (1-1000, default 100) with ``offset`` paging, mirroring the search
+    endpoint's pagination. An empty list means no recorded activity matches;
+    it never means no response exists.
     """
-    return service.list(params)
+    return service.list(params)[params.offset : params.offset + params.limit]
 
 
 @router.get("/{response_id}", response_model=ResponseActivity)

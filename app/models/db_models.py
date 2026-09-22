@@ -285,6 +285,12 @@ def create_all(engine) -> None:
     Base.metadata.create_all(bind=engine)
 
 
+# Application-required tables (users + the additive Phase 15 tables). Used by
+# the startup schema-readiness check; the list is derived from the ORM metadata
+# so it can never drift from the models.
+REQUIRED_TABLES = tuple(sorted(Base.metadata.tables.keys()))
+
+
 __all__ = [
     "Base",
     "UserRow",
@@ -295,5 +301,6 @@ __all__ = [
     "ResponseActivityRow",
     "FusionCandidateRow",
     "PriorityResultRow",
+    "REQUIRED_TABLES",
     "create_all",
 ]

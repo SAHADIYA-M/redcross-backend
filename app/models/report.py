@@ -17,6 +17,10 @@ class ReportStatus(str, Enum):
     RESOLVED = "RESOLVED"
 
 
+DEFAULT_CLUSTER_LOCATION = "Unknown Location"
+DEFAULT_CLUSTER_NEED = "General Request"
+
+
 class Report(BaseModel):
     """Backend representation of a humanitarian field report.
 
@@ -77,3 +81,13 @@ class Report(BaseModel):
             or self.time_sensitivity
             or self.evidence
         )
+
+    @property
+    def cluster_location(self) -> str:
+        """Normalized location used for duplicate/conflict cluster keys."""
+        return self.location or DEFAULT_CLUSTER_LOCATION
+
+    @property
+    def cluster_need(self) -> str:
+        """Normalized first need used for duplicate/conflict cluster keys."""
+        return self.needs[0].value if self.needs else DEFAULT_CLUSTER_NEED

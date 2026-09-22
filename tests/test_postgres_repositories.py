@@ -157,6 +157,38 @@ def test_report_update_missing_returns_none(factory) -> None:
     assert repo.update("missing", _report("missing")) is None
 
 
+def test_report_get_cluster_candidates_scopes_to_cluster(factory) -> None:
+    """The SQL pushdown only returns reports in the same location+first-need
+    cluster, mirroring the in-memory semantics used by fusion analysis."""
+    from app.models.report import DEFAULT_CLUSTER_LOCATION, DEFAULT_CLUSTER_NEED
+
+    repo = PostgresReportRepository(factory)
+    repo.create(_report("water-kozhikode", location="Kozhikode", needs=[NeedCategory.WATER]))
+    repo.create(
+        _report("food-kozhikode", location="Kozhikode", needs=[NeedCategory.FOOD])
+    )
+    repo.create(_report("water-kannur", location="Kannur", needs=[NeedCategory.WATER]))
+    repo.create(_report("no-need-kozhikode", location="Kozhikode", needs=[]))
+    repo.create(_report("no-location", location=None, needs=[NeedCategory.WATER]))
+
+    water_kozhikode = repo.get_cluster_candidates("Kozhikode", NeedCategory.WATER.value)
+    assert {r.id for r in water_kozhikode} == {"water-kozhikode"}
+
+    first_need_wins = repo.get_cluster_candidates("Kozhikode", NeedCategory.FOOD.value)
+    assert {r.id for r in first_need_wins} == {"food-kozhikode"}
+
+    no_need = repo.get_cluster_candidates("Kozhikode", DEFAULT_CLUSTER_NEED)
+    assert {r.id for r in no_need} == {"no-need-kozhikode"}
+
+    unknown_location = repo.get_cluster_candidates(
+        DEFAULT_CLUSTER_LOCATION, NeedCategory.WATER.value
+    )
+    assert {r.id for r in unknown_location} == {"no-location"}
+
+    other_location = repo.get_cluster_candidates("Kannur", NeedCategory.WATER.value)
+    assert {r.id for r in other_location} == {"water-kannur"}
+
+
 # ---------------------------------------------------------------------------
 # Users
 # ---------------------------------------------------------------------------
@@ -373,6 +405,81 @@ def test_priority_result_missing_returns_none(factory) -> None:
     assert repo.get_by_report("nope") is None
 
 
+def test_priority_result_delete_by_report(factory) -> None:
+    reports = PostgresReportRepository(factory)
+    reports.create(_report("r1", severity=SeverityLevel.CRITICAL))
+    repo = PostgresPriorityResultRepository(factory)
+    repo.save(
+        PriorityResult(
+            report_id="r1",
+            severity_score=100.0,
+            affected_population_score=75.0,
+            vulnerability_score=60.0,
+            time_sensitivity_score=100.0,
+            evidence_verification_score=40.0,
+            final_score=83.5,
+            priority_level=PriorityLevel.HIGH,
+            calculation_version="1",
+            calculated_at=datetime(2026, 9, 21, 10, 0, tzinfo=timezone.utc),
+        )
+    )
+    assert repo.get_by_report("r1") is not None
+    repo.delete_by_report("r1")
+    assert repo.get_by_report("r1") is None
+
+
+def test_report_patch_persists_audit_and_priority_postgres(factory) -> None:
+    """A PATCH audit record and refreshed priority persist through the ORM.
+
+    Exercises the PostgreSQL repositories against in-memory SQLite so the
+    append-only audit write and the priority upsert are proven to round-trip
+    through real SQLAlchemy mappings, not just the in-memory store.
+    """
+    from app.models.user import User, UserRole
+    from app.schemas.report import UpdateReport
+    from app.services.priority_service import PriorityService, priority_level_for_score
+    from app.services.report_service import ReportService
+
+    reports = PostgresReportRepository(factory)
+    reports.create(_report("r1", severity=SeverityLevel.LOW))
+    audit = PostgresAuditRepository(factory)
+    store = PostgresPriorityResultRepository(factory)
+    service = ReportService(
+        reports,
+        audit,
+        priority_service=PriorityService(reports, result_store=store),
+    )
+    actor = User(
+        user_id="actor-1",
+        username="assessor_user",
+        password_hash="not-a-real-hash",
+        role=UserRole.ASSESSOR,
+    )
+
+    service.update(
+        "r1", UpdateReport(severity=SeverityLevel.CRITICAL), actor=actor
+    )
+
+    records = audit.get_all()
+    assert [record.action for record in records] == [AuditAction.UPDATE_REPORT]
+    assert records[0].report_id == "r1"
+    assert records[0].actor_id == "actor-1"
+    assert records[0].old_value == {"severity": "LOW"}
+    assert records[0].new_value == {"severity": "CRITICAL"}
+
+    stored_priority = store.get_by_report("r1")
+    assert stored_priority is not None
+    assert stored_priority.severity_score == 100.0
+    assert stored_priority.priority_level == priority_level_for_score(
+        stored_priority.final_score
+    )
+
+    # Original evidence still immutable in the database.
+    stored_report = reports.get_by_id("r1")
+    assert stored_report is not None
+    assert stored_report.original_text == "Report r1"
+
+
 # ---------------------------------------------------------------------------
 # Search: SQL pushdown vs in-memory Python path parity
 # ---------------------------------------------------------------------------
@@ -467,6 +574,90 @@ def test_search_no_filters_falls_back_and_matches(factory) -> None:
     assert sql_ids == {
         r.id for r in SearchService(repository=in_mem)._candidates_for(query)
     }
+
+
+def _seed_escaping_reports(repo) -> None:
+    repo.create(_report(
+        "s1",
+        original_text="Dam capacity at 5% is unsafe",
+        location="Block at 5% slope",
+        incident="Flood",
+        source="sensor_x",
+    ))
+    repo.create(_report(
+        "s2",
+        original_text="Another 55% reading logged",
+        location="Block at 55% slope",
+        incident="Flood",
+        source="sensorX",
+    ))
+    repo.create(_report(
+        "s3",
+        original_text="Underscore_check manual log",
+        location="North wing",
+        incident="Underscore_check",
+        source="radio",
+    ))
+    repo.create(_report(
+        "s4",
+        original_text="A_B zone marked",
+        location="A_B region",
+        incident="Underscore check",
+        source="sensor",
+    ))
+    repo.create(_report(
+        "s5",
+        original_text="A5B zone",
+        location="A5B zone",
+        incident="Other event",
+        source="sensor_1",
+    ))
+    repo.create(_report(
+        "s6",
+        original_text="general field report",
+        location="Kochi",
+        incident="Flood",
+        source="field_assessment",
+    ))
+
+
+def test_search_percent_and_underscore_are_literal_everywhere(factory) -> None:
+    """% and _ in search text must match LITERALLY on location, incident,
+    source and free text - on SQLite exactly like PostgreSQL (no default
+    LIKE escape backends). Without escaping, '%' and '_' are wildcards and
+    would match far more than the user typed."""
+    sql_repo = PostgresReportRepository(factory)
+    in_mem = InMemoryReportRepository()
+    _seed_escaping_reports(sql_repo)
+    _seed_escaping_reports(in_mem)
+
+    cases = [
+        (SearchQuery(location="5% slope"), {"s1", "s2"}),
+        (SearchQuery(location="A_B"), {"s4"}),
+        (SearchQuery(incident="Underscore_check"), {"s3"}),
+        (SearchQuery(source="sensor_"), {"s1", "s5"}),
+        (SearchQuery(q="5%"), {"s1", "s2"}),
+        (SearchQuery(q="underscore"), {"s3"}),
+    ]
+    for query, expected in cases:
+        sql_ids = {
+            r.id for r in SearchService(repository=sql_repo)._candidates_for(query)
+        }
+        python_ids = {
+            r.id for r in SearchService(repository=in_mem)._candidates_for(query)
+        }
+        assert sql_ids == expected, (query, sql_ids)
+        assert sql_ids == python_ids, (query, sql_ids, python_ids)
+
+
+def test_search_underscore_wildcard_cannot_leak_other_reports(factory) -> None:
+    """An unescaped '_' would turn 'A_B' into the wildcard 'A?B' and wrongly
+    match 'A5B zone'; the escaped query must match only the literal text."""
+    sql_repo = PostgresReportRepository(factory)
+    _seed_escaping_reports(sql_repo)
+    query = SearchQuery(location="A_B")
+    sql_ids = {r.id for r in SearchService(repository=sql_repo)._candidates_for(query)}
+    assert sql_ids == {"s4"}
 
 
 # ---------------------------------------------------------------------------

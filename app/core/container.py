@@ -84,12 +84,19 @@ else:
     priority_result_store = None
 
 _auth_service = AuthService(user_repository)
-_report_service = ReportService(report_repository)
-_priority_service = PriorityService(report_repository, result_store=priority_result_store)
+_priority_service = PriorityService(
+    report_repository, result_store=priority_result_store
+)
+_report_service = ReportService(
+    report_repository,
+    audit_repository,
+    priority_service=_priority_service,
+)
 _verification_service = VerificationService(
     report_repository,
     verification_repository,
     audit_repository,
+    priority_service=_priority_service,
 )
 _response_service = ResponseService(
     response_repository,

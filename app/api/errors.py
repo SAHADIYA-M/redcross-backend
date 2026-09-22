@@ -9,6 +9,7 @@ from app.core.database import (
     DatabaseIntegrityError,
     DatabaseUnavailableError,
 )
+from app.location.errors import LocationError
 
 logger = logging.getLogger("app.errors")
 
@@ -62,6 +63,18 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=409,
             content={"detail": "The record conflicts with existing data"},
+        )
+
+    @app.exception_handler(LocationError)
+    async def location_error_handler(
+        request: Request, exc: LocationError
+    ) -> JSONResponse:
+        # One consistent, generic message for every geocoding failure (missing
+        # provider, upstream outage, timeout, malformed provider data). Never
+        # leaks provider-internal details.
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Geocoder temporarily unavailable"},
         )
 
     @app.exception_handler(Exception)

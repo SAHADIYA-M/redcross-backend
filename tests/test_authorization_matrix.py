@@ -20,10 +20,13 @@ ALL_ROLES = set(UserRole)
 REPORT_WRITER = {UserRole.ADMIN, UserRole.ASSESSOR, UserRole.REVIEWER, UserRole.RESPONDER}
 REVIEWERS = {UserRole.ADMIN, UserRole.REVIEWER}
 RESPONDERS = {UserRole.ADMIN, UserRole.RESPONDER}
+# Requesting a backend priority calculation is an assessment action, not a read.
+ASSESSMENT_REQUEST = {UserRole.ADMIN, UserRole.ASSESSOR, UserRole.REVIEWER}
 
 REPORT_ID = uuid.uuid4().hex
 RESPONSE_ID = uuid.uuid4().hex
 USER_ID = uuid.uuid4().hex
+FUSION_ID = uuid.uuid4().hex
 
 # Every non-public operation, with the roles allowed to call it.
 CASES: list[tuple[str, str, set[UserRole]]] = [
@@ -45,7 +48,12 @@ CASES: list[tuple[str, str, set[UserRole]]] = [
     ("POST", "/api/locations/geocode", ALL_ROLES),
     ("POST", f"/api/reports/{REPORT_ID}/duplicates", ALL_ROLES),
     ("POST", f"/api/reports/{REPORT_ID}/conflicts", ALL_ROLES),
-    ("POST", f"/api/reports/{REPORT_ID}/priority", ALL_ROLES),
+    ("POST", f"/api/reports/{REPORT_ID}/priority", ASSESSMENT_REQUEST),
+    # fusion candidates link report ids, reasons and similarity evidence; the
+    # reviewer's decision workspace is REVIEWER/ADMIN only.
+    ("GET", "/api/fusion", REVIEWERS),
+    ("GET", f"/api/fusion/{FUSION_ID}", REVIEWERS),
+    ("POST", f"/api/fusion/{FUSION_ID}/resolve", REVIEWERS),
     # writes restricted by role
     ("POST", "/api/reports", REPORT_WRITER),
     ("PATCH", f"/api/reports/{REPORT_ID}", REPORT_WRITER),
@@ -71,6 +79,8 @@ def _body_for(path: str, method: str) -> dict | None:
         return {"action": "APPROVE", "reason": "confirmed"}
     if path == f"/api/reports/{REPORT_ID}/request-assessment":
         return {"reason": "field check needed"}
+    if path == f"/api/fusion/{FUSION_ID}/resolve":
+        return {"action": "MERGED"}
     if path == "/api/responses" and method == "post":
         return {
             "report_id": REPORT_ID,
@@ -139,11 +149,20 @@ def test_any_active_role_can_read(app_client, auth_setup) -> None:
         relation = [
             f"/api/reports/{report['id']}/duplicates",
             f"/api/reports/{report['id']}/conflicts",
-            f"/api/reports/{report['id']}/priority",
         ]
         for url in relation:
             response = app_client.post(url, headers=headers)
             assert response.status_code == 200, (role.value, url)
+
+    # Requesting a priority calculation is an assessment action, not an open
+    # read: only ADMIN/ASSESSOR/REVIEWER may trigger it.
+    for role in ALL_ROLES:
+        response = app_client.post(
+            f"/api/reports/{report['id']}/priority",
+            headers=headers_for(auth_setup, role),
+        )
+        expected = 200 if role in ASSESSMENT_REQUEST else 403
+        assert response.status_code == expected, (role.value, response.status_code)
 
 
 def test_viewer_cannot_write_anything(app_client, auth_setup) -> None:
@@ -156,6 +175,10 @@ def test_viewer_cannot_write_anything(app_client, auth_setup) -> None:
          {"action": "APPROVE", "reason": "x"}),
         ("POST", f"/api/reports/{report['id']}/request-assessment",
          {"reason": "x"}),
+        ("POST", f"/api/reports/{report['id']}/priority", None),
+        ("GET", "/api/fusion", None),
+        ("GET", f"/api/fusion/{FUSION_ID}", None),
+        ("POST", f"/api/fusion/{FUSION_ID}/resolve", {"action": "MERGED"}),
         ("POST", "/api/responses",
          {"report_id": report["id"], "activity": "Deliver water"}),
         ("PATCH", f"/api/users/{USER_ID}", {"is_active": False}),
