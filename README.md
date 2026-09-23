@@ -38,7 +38,7 @@ AI outputs here are always **drafts pending human review** — the backend must 
 
 - **Language/Framework**: Python, FastAPI, Pydantic, Uvicorn
 - **Database**: In-memory repositories (PostgreSQL planned for future)
-- **Auth**: JWT authentication, bcrypt for password hashing
+- **Auth**: None on the API; bcrypt hashing for stored user records
 - **AI Provider**: Google Gemini (via `google-genai` package)
 - **Testing**: pytest
 
@@ -106,7 +106,7 @@ The currently implemented functionality includes:
 - Map functionality and information gaps
 - Search capabilities
 - Audit logging
-- Authentication (JWT), authorization, user/admin management
+- User/admin management (API is unauthenticated; roles drive user-management guards only)
 
 ---
 
@@ -121,15 +121,12 @@ The currently implemented functionality includes:
 | POST | `/api/reports/{report_id}/priority` | Calculate priority for a report |
 | POST | `/api/reports/{report_id}/duplicates` | Detect duplicates |
 | POST | `/api/reports/{report_id}/conflicts` | Detect conflicts |
-| PATCH | `/api/reports/{report_id}/verify` | Human verify/edit/approve a report (Auth: REVIEWER/ADMIN) |
-| POST | `/api/reports/{report_id}/request-assessment` | Request assessment for a report (Auth: REVIEWER/ADMIN) |
+| PATCH | `/api/reports/{report_id}/verify` | Human verify/edit/approve a report |
+| POST | `/api/reports/{report_id}/request-assessment` | Request assessment for a report |
 | GET | `/api/verification` | List verification records |
 | POST | `/api/ai/analyze` | Run AI extraction on text |
 | GET | `/api/analytics/response-coverage` | Get response coverage analytics |
 | GET | `/api/audit` | Audit trail query |
-| POST | `/api/auth/register` | Public registration |
-| POST | `/api/auth/login` | Obtain JWT token |
-| GET | `/api/auth/me` | Get current user profile |
 | POST | `/api/locations/geocode` | Geocode a location |
 | GET | `/api/map/reports` | Map data for reports |
 | GET | `/api/map/information-gaps` | List detected information gaps |
@@ -146,11 +143,10 @@ The currently implemented functionality includes:
 
 ## 8. Authentication
 
-The system uses JWT (JSON Web Tokens) for authentication and role-based access control. Password hashing is done with bcrypt.
-- **Public Registration**: Available with a default role configured by `PUBLIC_REGISTER_ROLE`.
-- **Role Restrictions**: `PUBLIC_REGISTER_ROLE` cannot be ADMIN.
-- **Admin Management**: Supports a development-only seed admin (enabled via `SEED_DEV_ADMIN` in non-production environments).
-- **Production**: A secure, long `JWT_SECRET_KEY` is required in production environments.
+The API is intentionally unauthenticated: there is no login, no bearer tokens, no JWTs, and no authorization middleware. Every endpoint serves any caller identically.
+
+- Roles (`ADMIN`, `REVIEWER`, `ASSESSOR`, `VIEWER`) still exist as attributes of stored user records; they drive user-management guards (e.g. the final-admin lockout) but do not gate HTTP access.
+- Passwords are never stored, returned or logged in plaintext — only bcrypt hashes are kept on user records, used when seeding/creating user rows rather than for any login flow.
 
 ---
 
@@ -184,13 +180,6 @@ Configure the system by creating a `.env` file based on `.env.example`. Do not c
 - `AI_MAX_RETRIES`: Max retries for AI.
 - `AI_RETRY_BACKOFF_SECONDS`: Backoff for AI retries.
 - `GEOCODER_PROVIDER`: Target geocoding provider.
-- `JWT_SECRET_KEY`: Secret for JWT signing (Required in production).
-- `JWT_ALGORITHM`: Hashing algorithm for JWT.
-- `ACCESS_TOKEN_EXPIRE_MINUTES`: Expiry time for tokens.
-- `PUBLIC_REGISTER_ROLE`: Default role for open registration.
-- `SEED_DEV_ADMIN`: Whether to seed a dev admin on startup.
-- `DEV_ADMIN_USERNAME`: Dev admin username.
-- `DEV_ADMIN_PASSWORD`: Dev admin password.
 
 ---
 
@@ -222,7 +211,7 @@ Run the tests using:
 ```bash
 pytest
 ```
-Currently, the verified test suite has **430 passing tests**.
+Currently, the verified test suite has **562 passing tests**.
 
 ---
 

@@ -35,9 +35,9 @@ class VerifyRequest(BaseModel):
     reviewer_id: str | None = Field(
         default=None,
         description=(
-            "Optional reviewer identifier. With authentication implemented, "
-            "the API always overrides this with the authenticated reviewer's "
-            "identity, so the field is informational and never authoritative."
+            "Optional reviewer identifier recorded as-is on the verification "
+            "record for traceability; the API is unauthenticated and never "
+            "imposes an identity."
         ),
     )
     edits: VerificationEdits | None = Field(
@@ -80,8 +80,8 @@ class RequestAssessmentRequest(BaseModel):
     reviewer_id: str | None = Field(
         default=None,
         description=(
-            "Optional reviewer identifier (always overridden by the "
-            "authenticated reviewer's identity)."
+            "Optional reviewer identifier recorded as-is for traceability; "
+            "the API is unauthenticated and never imposes an identity."
         ),
     )
 

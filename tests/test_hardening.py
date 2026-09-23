@@ -335,7 +335,7 @@ def test_verification_edit_invalidates_stale_priority_when_signal_removed() -> N
 
 
 def test_verification_edit_clears_a_null_list_claim_without_error(
-    app_client, reviewer_headers
+    app_client,
 ) -> None:
     """A reviewer clearing a list claim with ``null`` must not trigger a 500.
 
@@ -355,7 +355,6 @@ def test_verification_edit_clears_a_null_list_claim_without_error(
     assert created.status_code == 201, created.text
     report_id = created.json()["id"]
 
-    app_client.headers.update(reviewer_headers)
     response = app_client.patch(
         f"/api/reports/{report_id}/verify",
         json={"action": "EDIT", "edits": {"vulnerability": None}},

@@ -17,9 +17,8 @@ MAX_EVIDENCE_ITEM = 2_000
 
 
 @pytest.fixture()
-def client(auth_setup, admin_headers) -> TestClient:
+def client() -> TestClient:
     with TestClient(app) as test_client:
-        test_client.headers.update(admin_headers)
         yield test_client
     app.dependency_overrides.clear()
 

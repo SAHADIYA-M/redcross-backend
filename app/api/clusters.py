@@ -1,6 +1,5 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status
-from app.api.deps import get_current_active_user
+from fastapi import APIRouter, Depends, HTTPException
 from app.core.container import get_report_repository
 from app.services.cluster_service import ClusterService
 from app.schemas.cluster import PaginatedClusters, NeedCluster
@@ -13,7 +12,6 @@ def get_cluster_service() -> ClusterService:
 
 @router.get("", response_model=PaginatedClusters)
 def get_clusters(
-    current_user: Annotated[dict, Depends(get_current_active_user)],
     service: Annotated[ClusterService, Depends(get_cluster_service)],
 ) -> PaginatedClusters:
     clusters = service.get_clusters()
@@ -27,7 +25,6 @@ def get_clusters(
 @router.get("/{cluster_id}", response_model=NeedCluster)
 def get_cluster(
     cluster_id: str,
-    current_user: Annotated[dict, Depends(get_current_active_user)],
     service: Annotated[ClusterService, Depends(get_cluster_service)],
 ) -> NeedCluster:
     clusters = service.get_clusters()

@@ -1,9 +1,10 @@
 """Phase 14 contract-level integration tests.
 
 Guards the API surface that front-end clients actually depend on: exactly
-the intended OpenAPI path set, the bearer security scheme binding, the
-unified error-JSON shapes for the whole backend, and CORS behaviour. These
-hold across features regardless of service internals.
+the intended OpenAPI path set, NO bearer security scheme anywhere (the API
+is unauthenticated), the unified error-JSON shapes for the whole backend,
+and CORS behaviour. These hold across features regardless of service
+internals.
 """
 
 import uuid
@@ -13,24 +14,12 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
-PUBLIC_OPERATIONS = {
-    ("/", "get"),
-    ("/health", "get"),
-    ("/api/auth/register", "post"),
-    ("/api/auth/login", "post"),
-    ("/api/needs", "get"),
-    ("/api/priorities", "get"),
-}
-
 EXPECTED_PATHS = {
     "/",
     "/health",
     "/api/ai/analyze",
     "/api/analytics/response-coverage",
     "/api/audit",
-    "/api/auth/login",
-    "/api/auth/me",
-    "/api/auth/register",
     "/api/clusters",
     "/api/clusters/{cluster_id}",
     "/api/fusion",
@@ -62,13 +51,12 @@ def _plain_client() -> TestClient:
     return TestClient(app)
 
 
-def _protected_operations() -> list[tuple[str, str]]:
+def _all_operations() -> list[tuple[str, str]]:
     schema = app.openapi()
     operations: list[tuple[str, str]] = []
     for path, methods in schema["paths"].items():
         for method in methods:
-            if (path, method) not in PUBLIC_OPERATIONS:
-                operations.append((path, method))
+            operations.append((path, method))
     return operations
 
 
@@ -77,7 +65,7 @@ def _fake_id() -> str:
 
 
 def _body_for(path: str, method: str) -> dict | None:
-    """Valid minimal bodies so only the auth/role check decides the status."""
+    """Valid minimal bodies so only correctness of the call decides."""
     if path == "/api/ai/analyze":
         return {"original_text": "people need water"}
     if path == "/api/locations/geocode":
@@ -104,29 +92,22 @@ def _body_for(path: str, method: str) -> dict | None:
 
 
 def test_openapi_exposes_exactly_the_intended_surface() -> None:
-    """The whole backend contract stays 25 paths - freezing the surface."""
+    """The whole backend contract stays this exact path set - frozen."""
     schema = app.openapi()
     assert set(schema["paths"].keys()) == EXPECTED_PATHS
     assert schema["info"]["title"] == app.title
     assert schema["openapi"].startswith("3.")
-    assert schema["components"]["securitySchemes"]["HTTPBearer"] == {
-        "type": "http",
-        "scheme": "bearer",
-    }
 
 
-def test_only_public_operations_lack_bearer_security() -> None:
+def test_no_bearer_security_scheme_is_registered() -> None:
+    """The unauthenticated API must never advertise an HTTPBearer scheme."""
     schema = app.openapi()
+    assert "securitySchemes" not in schema["components"] or not schema["components"][
+        "securitySchemes"
+    ]
     for path, methods in schema["paths"].items():
         for method in methods:
-            op = schema["paths"][path][method]
-            if (path, method) in PUBLIC_OPERATIONS:
-                assert "security" not in op or not op["security"]
-            else:
-                assert op.get("security") == [{"HTTPBearer": []}], (
-                    path,
-                    method,
-                )
+            assert "security" not in schema["paths"][path][method], (path, method)
 
 
 def test_public_surface_answers_without_authentication() -> None:
@@ -135,24 +116,20 @@ def test_public_surface_answers_without_authentication() -> None:
     assert client.get("/health").status_code == 200
     assert client.get("/docs").status_code == 200
     assert client.get("/openapi.json").status_code == 200
-    registered = client.post(
-        "/api/auth/register",
-        json={"username": f"volunteer_{uuid.uuid4().hex[:6]}", "password": "s3cret-pass"},
-    )
-    assert registered.status_code == 201
 
 
 @pytest.mark.parametrize(
     "path,method",
-    [(p, m) for p, m in _protected_operations()],
+    [(p, m) for p, m in _all_operations()],
 )
-def test_every_protected_operation_requires_a_bearer_token(path, method) -> None:
+def test_every_operation_is_served_without_a_bearer_token(path, method) -> None:
+    """No operation anywhere returns 401/403: the API is fully open."""
     client = _plain_client()
     url = path.replace("{report_id}", _fake_id()).replace(
         "{response_id}", _fake_id()
     ).replace("{user_id}", _fake_id())
     response = client.request(method, url, json=_body_for(path, method))
-    assert response.status_code == 401
+    assert response.status_code not in (401, 403), (path, method, response.status_code)
 
 
 def test_not_found_errors_use_the_standard_json_shape(app_client) -> None:
@@ -178,7 +155,7 @@ def test_cors_preflight_headers(app_client) -> None:
         headers={
             "Origin": "https://example.org",
             "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "authorization,content-type",
+            "Access-Control-Request-Headers": "content-type",
         },
     )
     assert response.status_code == 200

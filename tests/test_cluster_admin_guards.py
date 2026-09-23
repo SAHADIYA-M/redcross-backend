@@ -93,9 +93,7 @@ def test_cluster_separator_in_location_keeps_locations_distinct() -> None:
     ]
 
 
-def test_clusters_api_returns_200_with_separator_location(
-    auth_setup,
-) -> None:
+def test_clusters_api_returns_200_with_separator_location() -> None:
     """The full ``GET /api/clusters`` path returns 200, not a 500."""
     from app.api.clusters import get_cluster_service
     from app.main import app
@@ -109,11 +107,7 @@ def test_clusters_api_returns_200_with_separator_location(
     )
     try:
         with TestClient(app) as client:
-            from tests.helpers import headers_for
-            from app.models.user import UserRole
-
-            headers = headers_for(auth_setup, UserRole.VIEWER)
-            resp = client.get("/api/clusters", headers=headers)
+            resp = client.get("/api/clusters")
             assert resp.status_code == 200, resp.text
             assert resp.json()["count"] == 1
             assert resp.json()["results"][0]["location"] == "Camp Sector::North"
@@ -121,7 +115,7 @@ def test_clusters_api_returns_200_with_separator_location(
             # detail lookup uses the same cluster derivation and must not crash
             key = "Camp Sector::North::WATER"
             cluster_id = "NEX-" + md5(key.encode()).hexdigest()[:6].upper()
-            detail = client.get(f"/api/clusters/{cluster_id}", headers=headers)
+            detail = client.get(f"/api/clusters/{cluster_id}")
             assert detail.status_code == 200, detail.text
             assert detail.json()["location"] == "Camp Sector::North"
     finally:

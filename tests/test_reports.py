@@ -8,13 +8,12 @@ from app.services.report_service import ReportService
 
 
 @pytest.fixture()
-def client(auth_setup, admin_headers):
+def client():
     """Give every test a clean, isolated in-memory repository."""
     repository = InMemoryReportRepository()
     service = ReportService(repository)
     app.dependency_overrides[get_report_service] = lambda: service
     with TestClient(app) as test_client:
-        test_client.headers.update(admin_headers)
         yield test_client
     app.dependency_overrides.clear()
 

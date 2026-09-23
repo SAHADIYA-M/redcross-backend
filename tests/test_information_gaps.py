@@ -51,9 +51,9 @@ def _ts(days_ago: int = 0, hours_ago: int = 0) -> str:
 
 
 @pytest.fixture()
-def client(auth_setup, admin_headers):
+def client():
     """Clean, isolated in-memory storage with a fixed reference clock. The
-    client is pre-authenticated as the seeded ADMIN user."""
+    client sends no Authorization header — the API is public."""
     report_repository = InMemoryReportRepository()
     verification_repository = InMemoryVerificationRepository()
     audit_repository = InMemoryAuditRepository()
@@ -81,7 +81,6 @@ def client(auth_setup, admin_headers):
         )
     )
     with TestClient(app) as test_client:
-        test_client.headers.update(admin_headers)
         yield test_client
     app.dependency_overrides.clear()
 

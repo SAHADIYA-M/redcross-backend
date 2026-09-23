@@ -1,44 +1,25 @@
-"""Pytest fixtures shared across the whole test suite (Phase 13 auth setup).
+"""Pytest fixtures shared across the whole test suite (open API).
 
-``auth_setup`` seeds an in-memory user repository with one user per role and
-overrides the app's user-repository dependency, so any TestClient issued
-against ``app`` resolves bearer tokens against those seeded users. The role
-header fixtures return ready-to-attach Authorization headers.
+The API is unauthenticated: no user repository is seeded and no client
+carries an Authorization header, so every request exercises the same
+public-open path an operator sees in production.
+
+The offline suite is hermetic: it must NEVER touch a live database, so the
+container is forced to in-memory storage (DATABASE_URL cleared +
+USE_PERSISTENT_DB=false) BEFORE any ``app`` module is imported.
 """
 
 import json
+import os
 from types import SimpleNamespace
 
-import bcrypt
+os.environ["USE_PERSISTENT_DB"] = "false"
+os.environ["DATABASE_URL"] = ""
+
 import pytest
 from fastapi.testclient import TestClient
 
-import app.services.auth_service as auth_service_module
 from app.api.ai import get_ai_service
-from app.models.user import UserRole
-from tests.helpers import (
-    clear_user_repository_override,
-    headers_for,
-    make_auth_setup,
-    override_user_repository,
-)
-
-
-def _fast_hash_password(password: str) -> str:
-    """Test-only bcrypt hashing at a very low cost factor.
-
-    Seeding users runs once per fixture-using test; the default cost (rounds
-    = 12) would add roughly 1.2s of hashing to every single test. The cost
-    factor is a security/performance trade-off that is irrelevant to the
-    behaviour under test, so tests force rounds=4. verify_password reads the
-    cost from the stored hash, so login checks stay consistent.
-    """
-    return bcrypt.hashpw(
-        password.encode("utf-8"), bcrypt.gensalt(rounds=4)
-    ).decode("utf-8")
-
-
-auth_service_module.hash_password = _fast_hash_password
 
 
 @pytest.fixture(autouse=True)
@@ -47,18 +28,19 @@ def offline_container_fusion(monkeypatch):
 
     ``ReportService._run_fusion_analysis`` calls
     ``app.core.container.get_fusion_service`` directly (a plain function call,
-    NOT a FastAPI dependency), so route-level ``dependency_overrides`` never
-    intercept the report-create path. With a real ``DATABASE_URL`` in the
-    environment the container therefore builds the live PostgreSQL fusion
-    service, making every offline report creation touch the live database.
-    That live-network dependence produced the Batch 4 transient failures.
+    NOT a FastAPI dependency), so the container itself must be patched for the
+    report-create path. The fusion ROUTER dependencies import their factory
+    functions from the container at import time, so they hold stale copies and
+    must be pinned via ``dependency_overrides`` to the SAME shared in-memory
+    pair — otherwise creation writes to one repository and listing reads
+    another (or, with a configured DATABASE_URL, a live database).
 
-    This autouse fixture swaps the container's fusion service AND its fusion
-    repository for one shared in-memory pair for every test, so candidate
-    generation (create path), listing, detail and resolve all observe the same
-    offline data. Tests that need a specific fusion behavior override the
-    container function again via their own monkeypatch, which is applied after
-    this one and wins for that test.
+    This autouse fixture wires one shared in-memory fusion pair to BOTH the
+    container and the router dependencies, so candidate generation (create
+    path), listing, detail and resolve all observe the same offline data.
+    Tests that need a specific fusion behavior override the container
+    function again via their own monkeypatch or dependency_overrides, which
+    are applied after this one and win for that test.
     """
     import app.core.container as container_module
 
@@ -71,49 +53,16 @@ def offline_container_fusion(monkeypatch):
     )
     monkeypatch.setattr(container_module, "get_fusion_repository", lambda: repository)
 
-
-@pytest.fixture()
-def auth_setup():
-    """Fresh seeded users (one per role) wired to the live app.
-
-    Both the user-repository AND the auth-service dependencies point at the
-    seeded repository, so request authentication, API registration and API
-    login all operate on exactly the same in-memory data as the seeded users.
-    """
-    from app.api.deps import get_auth_service
+    from app.api.fusion import get_fusion_repository, get_fusion_service
     from app.main import app
 
-    setup = make_auth_setup()
-    override_user_repository(setup)
-    app.dependency_overrides[get_auth_service] = lambda: setup.service
-    yield setup
-    app.dependency_overrides.pop(get_auth_service, None)
-    clear_user_repository_override()
-
-
-@pytest.fixture()
-def admin_headers(auth_setup) -> dict[str, str]:
-    return headers_for(auth_setup, UserRole.ADMIN)
-
-
-@pytest.fixture()
-def assessor_headers(auth_setup) -> dict[str, str]:
-    return headers_for(auth_setup, UserRole.ASSESSOR)
-
-
-@pytest.fixture()
-def reviewer_headers(auth_setup) -> dict[str, str]:
-    return headers_for(auth_setup, UserRole.REVIEWER)
-
-
-@pytest.fixture()
-def responder_headers(auth_setup) -> dict[str, str]:
-    return headers_for(auth_setup, UserRole.RESPONDER)
-
-
-@pytest.fixture()
-def viewer_headers(auth_setup) -> dict[str, str]:
-    return headers_for(auth_setup, UserRole.VIEWER)
+    app.dependency_overrides[get_fusion_service] = (
+        lambda: FusionService(repository)
+    )
+    app.dependency_overrides[get_fusion_repository] = lambda: repository
+    yield
+    app.dependency_overrides.pop(get_fusion_repository, None)
+    app.dependency_overrides.pop(get_fusion_service, None)
 
 
 # ---------------------------------------------------------------------------
@@ -166,14 +115,15 @@ def storage_repos() -> SimpleNamespace:
 
 
 @pytest.fixture()
-def app_client(auth_setup, admin_headers, storage_repos) -> TestClient:
+def app_client(storage_repos) -> TestClient:
     """Every repository-consuming dependency wired to the same fresh storage.
 
     Reports, verification, audit, response activities, priority, duplicates,
     conflicts, search, map, information gaps and coverage all operate on the
     exact same in-memory data. Gemini is replaced with a scripted fake and
     geocoding uses the offline StubGeocoder, so the whole pipeline is
-    deterministic and requires no external service.
+    deterministic and requires no external service. The client sends NO
+    Authorization header — every endpoint is public.
     """
     from fastapi.testclient import TestClient
 
@@ -248,8 +198,5 @@ def app_client(auth_setup, admin_headers, storage_repos) -> TestClient:
     app.dependency_overrides[get_ai_service] = lambda: AIService(_ScriptedAIClient())
 
     with TestClient(app) as client:
-        client.headers.update(admin_headers)
         yield client
     app.dependency_overrides.clear()
-import os
-os.environ['USE_PERSISTENT_DB'] = 'false'

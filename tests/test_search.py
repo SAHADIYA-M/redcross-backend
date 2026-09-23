@@ -33,13 +33,13 @@ BASE_TIME = "2026-09-20T10:00:00Z"
 
 
 @pytest.fixture()
-def client(auth_setup, admin_headers):
+def client():
     """Give every test a clean, isolated in-memory storage set.
 
     Search runs against the same shared repositories as the reports API, with
     the Phase 8 priority service wired in, so priority filters and sort by
-    priority produce the same numbers as POST /priority. The client is
-    pre-authenticated as the seeded ADMIN user.
+    priority produce the same numbers as POST /priority. The client sends no
+    Authorization header — the API is public.
     """
     report_repository = InMemoryReportRepository()
     verification_repository = InMemoryVerificationRepository()
@@ -73,13 +73,12 @@ def client(auth_setup, admin_headers):
         )
     )
     with TestClient(app) as test_client:
-        test_client.headers.update(admin_headers)
         yield test_client
     app.dependency_overrides.clear()
 
 
 @pytest.fixture()
-def client_without_geocoder(auth_setup, admin_headers):
+def client_without_geocoder():
     """Search with no location service configured (bbox must 503)."""
     report_repository = InMemoryReportRepository()
     app.dependency_overrides[get_report_service] = (
@@ -89,7 +88,6 @@ def client_without_geocoder(auth_setup, admin_headers):
         lambda: SearchService(report_repository, PriorityService(report_repository))
     )
     with TestClient(app) as test_client:
-        test_client.headers.update(admin_headers)
         yield test_client
     app.dependency_overrides.clear()
 

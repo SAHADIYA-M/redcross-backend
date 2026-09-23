@@ -219,28 +219,15 @@ def test_verification_edit_within_limit_applied(app_client: TestClient) -> None:
     assert response.status_code == 200, response.text
 
 
-# ------------------------------------------------------------------ auth
-# login password / user full_name bounds
-
-
-def test_login_password_too_long_rejected(auth_setup) -> None:
-    with TestClient(app) as test_client:
-        response = test_client.post(
-            "/api/auth/login",
-            json={"username": "admin_user", "password": "p" * (MAX_PASSWORD_LENGTH + 1)},
-        )
-        assert response.status_code == 422
-    app.dependency_overrides.clear()
+# ---------------------------------------------------------------- users
+# user full_name bounds (no auth API remains)
 
 
 def test_user_update_full_name_too_long_rejected(
-    app_client: TestClient, auth_setup
+    app_client: TestClient,
 ) -> None:
-    from app.models.user import UserRole
-
-    admin_id = auth_setup.users[UserRole.ADMIN].user_id
     response = app_client.patch(
-        f"/api/users/{admin_id}",
+        "/api/users/does-not-exist",
         json={"full_name": "n" * (MAX_FULL_NAME_LENGTH + 1)},
     )
     assert response.status_code == 422

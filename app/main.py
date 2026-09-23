@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 from app.api.ai import router as ai_router
 from app.api.analytics import router as analytics_router
 from app.api.audit import router as audit_router
-from app.api.auth import router as auth_router
 from app.api.fusion import router as fusion_router
 from app.api.clusters import router as clusters_router
 from app.api.conflicts import router as conflicts_router
@@ -30,19 +29,13 @@ from app.schemas.response import HealthResponse, MessageResponse
 
 logger = logging.getLogger("app.main")
 
-if settings.environment != "development":
-    # Any non-development environment must fail closed when no real JWT
-    # secret is configured (production, staging, ...). Development keeps the
-    # development-only fallback so local runs need no secret.
-    settings.effective_jwt_secret_key()
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Database bootstrap (schema creation, schema readiness, development-admin
-    # seed) runs here — once per process startup — instead of as an unsafe
-    # import-time side effect. It is a safe no-op unless the operator enabled
-    # the corresponding startup work.
+    # Database bootstrap (schema creation, schema readiness) runs here — once
+    # per process startup — instead of as an unsafe import-time side effect.
+    # It is a safe no-op unless the operator enabled the corresponding startup
+    # work.
     bootstrap_module.run_startup_bootstrap()
     yield
 
@@ -72,7 +65,6 @@ app.include_router(map_router)
 app.include_router(responses_router)
 app.include_router(map_responses_router)
 app.include_router(analytics_router)
-app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(fusion_router)
 

@@ -42,31 +42,8 @@ def _priority(client: TestClient, report_id: str) -> dict:
 
 
 # --------------------------------------------------------------------------
-# 1. Auth -> AI -> Report: the intake pipeline
+# 1. AI -> Report: the intake pipeline
 # --------------------------------------------------------------------------
-
-
-def test_register_login_me_flow(app_client: TestClient, auth_setup) -> None:
-    """Public registration + login + /me produce a working viewer token."""
-    response = app_client.post(
-        "/api/auth/register",
-        json={"username": "new_volunteer", "password": "s3cret-pass"},
-    )
-    assert response.status_code == 201
-    assert response.json()["role"] == "VIEWER"
-    assert "password" not in response.json()
-
-    login = app_client.post(
-        "/api/auth/login",
-        json={"username": "new_volunteer", "password": "s3cret-pass"},
-    )
-    assert login.status_code == 200
-    token = login.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    me = app_client.get("/api/auth/me", headers=headers)
-    assert me.status_code == 200
-    assert me.json()["username"] == "new_volunteer"
 
 
 def test_ai_analysis_and_report_creation_feed_each_other(
@@ -206,11 +183,8 @@ def test_verification_edit_recalculates_priority_and_updates_search_map(
 
 
 def test_response_coverage_reflects_reported_needs_and_cancelled_exclusion(
-    app_client: TestClient, auth_setup
+    app_client: TestClient,
 ) -> None:
-    from app.models.user import UserRole
-
-    responder = auth_setup.users[UserRole.RESPONDER]
     report = _create(app_client)
     # Reviewed so the operationally visible need carries verification context.
     app_client.patch(
@@ -276,13 +250,10 @@ def test_response_coverage_reflects_reported_needs_and_cancelled_exclusion(
     assert response_id in listed_ids
     assert cancelled_id in listed_ids  # cancelled stays listable/traceable
 
-    # A status change is audited with the authenticated responder as actor.
-    from tests.helpers import headers_for
-
+    # A status change is audited; the supplied actor_id is kept as-is.
     update = app_client.patch(
         f"/api/responses/{response_id}",
         json={"response_status": "IN_PROGRESS", "reason": "kicked off", "actor_id": "spoof"},
-        headers=headers_for(auth_setup, UserRole.RESPONDER),
     )
     assert update.status_code == 200
     assert update.json()["response_status"] == "IN_PROGRESS"
@@ -295,9 +266,8 @@ def test_response_coverage_reflects_reported_needs_and_cancelled_exclusion(
     assert response_audits[0]["report_id"] == report["id"]
     assert response_audits[0]["old_value"] == {"response_status": "PLANNED"}
     assert response_audits[0]["new_value"] == {"response_status": "IN_PROGRESS"}
-    # The authenticated responder is the actor; a spoofed actor_id in the
-    # body can never override who the audit log records.
-    assert response_audits[0]["actor_id"] == responder.user_id
+    # No authentication exists to override the body; "spoof" is preserved.
+    assert response_audits[0]["actor_id"] == "spoof"
 
     # The in-progress activity appears on the response map with real coords.
     response_map = app_client.get("/api/map/responses").json()
@@ -408,25 +378,14 @@ def test_audit_trail_is_append_only_and_covers_the_whole_flow(
 # --------------------------------------------------------------------------
 
 
-def test_admin_can_list_and_demote_a_user(
-    app_client: TestClient, auth_setup
+def test_user_management_is_open(
+    app_client: TestClient,
 ) -> None:
-    from app.models.user import UserRole
+    assert app_client.get("/api/users").status_code == 200
 
-    viewer = auth_setup.users[UserRole.VIEWER]
-    users = app_client.get("/api/users").json()
-    assert any(u["user_id"] == viewer.user_id for u in users)
-
-    demoted = app_client.patch(
-        f"/api/users/{viewer.user_id}",
+    # Patching a nonexistent user is an open call resolving to a clean 404.
+    missing = app_client.patch(
+        "/api/users/does-not-exist",
         json={"is_active": False},
-    ).json()
-    assert demoted["is_active"] is False
-
-    # The deactivated user can no longer access any protected endpoint.
-    from tests.helpers import headers_for
-
-    stale = app_client.get(
-        "/api/auth/me", headers=headers_for(auth_setup, UserRole.VIEWER)
     )
-    assert stale.status_code == 403
+    assert missing.status_code == 404

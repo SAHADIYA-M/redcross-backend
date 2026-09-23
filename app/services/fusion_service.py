@@ -192,7 +192,12 @@ class FusionService:
                     existing_ids.add(cand_id)
                     existing_keys.add(pair_key)
 
-    def resolve(self, candidate_id: str, resolution: FusionResolution, user_id: str) -> FusionCandidate | None:
+    def resolve(
+        self,
+        candidate_id: str,
+        resolution: FusionResolution,
+        user_id: str | None = None,
+    ) -> FusionCandidate | None:
         candidate = self._repository.get_by_id(candidate_id)
         if not candidate:
             return None

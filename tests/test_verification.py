@@ -29,13 +29,13 @@ BASE_TIME = "2026-09-20T10:00:00Z"
 
 
 @pytest.fixture()
-def client(auth_setup, admin_headers):
+def client():
     """Give every test a clean, isolated in-memory storage set.
 
     All repositories are created fresh and shared so report creation,
     verification, audit, duplicate and conflict features all see the same
-    data — exactly like the production app wiring. The client is
-    pre-authenticated as the seeded ADMIN user.
+    data — exactly like the production app wiring. The client sends no
+    Authorization header — the API is public.
     """
     report_repository = InMemoryReportRepository()
     verification_repository = InMemoryVerificationRepository()
@@ -62,7 +62,6 @@ def client(auth_setup, admin_headers):
         lambda: ConflictDetectionService(report_repository)
     )
     with TestClient(app) as test_client:
-        test_client.headers.update(admin_headers)
         yield test_client
     app.dependency_overrides.clear()
 
@@ -327,10 +326,7 @@ def test_uncertainty_remains_uncertainty(client: TestClient) -> None:
 # --------------------------------------------------------------------------
 
 
-def test_request_assessment(client: TestClient, auth_setup) -> None:
-    from app.models.user import UserRole
-
-    admin_user = auth_setup.users[UserRole.ADMIN]
+def test_request_assessment(client: TestClient) -> None:
     report = _create(client)
     response = client.post(
         f"/api/reports/{report['id']}/request-assessment",
@@ -349,9 +345,8 @@ def test_request_assessment(client: TestClient, auth_setup) -> None:
     assert vr["action"] == "REQUEST_ASSESSMENT"
     assert vr["previous_status"] == "UNVERIFIED"
     assert vr["new_status"] == "ASSESSMENT_REQUESTED"
-    # The authenticated reviewer is authoritative; a spoofed reviewer_id is
-    # ignored (Phase 13).
-    assert vr["reviewer_id"] == admin_user.user_id
+    # No authentication: the supplied reviewer identifier is kept as-is.
+    assert vr["reviewer_id"] == "analyst_1"
     assert vr["reason"].startswith("Location is ambiguous")
     audit = _audit(client, report["id"])
     assert audit[0]["action"] == "REQUEST_ASSESSMENT"
@@ -548,10 +543,7 @@ def test_verification_status_transitions(client: TestClient) -> None:
 # --------------------------------------------------------------------------
 
 
-def test_audit_record_created(client: TestClient, auth_setup) -> None:
-    from app.models.user import UserRole
-
-    admin_user = auth_setup.users[UserRole.ADMIN]
+def test_audit_record_created(client: TestClient) -> None:
     report = _create(client)
     _verify(client, report["id"], action="APPROVE", reason="confirmed")
     records = _audit(client)
@@ -559,8 +551,8 @@ def test_audit_record_created(client: TestClient, auth_setup) -> None:
     record = records[0]
     assert record["report_id"] == report["id"]
     assert record["action"] == "APPROVE"
-    # Phase 13: the authenticated reviewer is recorded as the actor.
-    assert record["actor_id"] == admin_user.user_id
+    # The API is unauthenticated: no identity is imposed, actor stays null.
+    assert record["actor_id"] is None
     assert record["reason"] == "confirmed"
     assert record["old_value"] == {"verification_status": "UNVERIFIED"}
     assert record["new_value"] == {"verification_status": "VERIFIED"}
@@ -568,14 +560,11 @@ def test_audit_record_created(client: TestClient, auth_setup) -> None:
     assert record["audit_id"]
 
 
-def test_audit_records_reviewer_id(client: TestClient, auth_setup) -> None:
-    from app.models.user import UserRole
-
-    admin_user = auth_setup.users[UserRole.ADMIN]
+def test_audit_records_supplied_reviewer_id(client: TestClient) -> None:
     report = _create(client)
     _verify(client, report["id"], action="APPROVE", reason="ok", reviewer_id="alice")
-    # The authenticated reviewer is authoritative; "alice" is never recorded.
-    assert _audit(client)[0]["actor_id"] == admin_user.user_id
+    # With no authentication, the supplied reviewer_id is recorded as-is.
+    assert _audit(client)[0]["actor_id"] == "alice"
 
 
 # --------------------------------------------------------------------------

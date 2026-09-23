@@ -1,8 +1,7 @@
-"""Request/response schemas for authentication and user management.
+"""Request/response schemas for user management.
 
 Public responses never expose password hashes or any internal credential
-field. Registration deliberately has no ``role`` field: a client can never
-self-assign an elevated role (privilege escalation is impossible by design).
+field.
 """
 
 from datetime import datetime
@@ -14,12 +13,10 @@ from app.schemas.lengths import MAX_FULL_NAME_LENGTH, MAX_PASSWORD_LENGTH
 
 
 class UserCreate(BaseModel):
-    """Body of POST /api/auth/register.
+    """Payload for creating a user record (internal / seeding use).
 
-    Registration is public and can never carry a ``role``: an elevated role is
-    assigned only by the admin-only user-management layer, never by a
-    self-registering client (no privilege escalation). Unknown extra fields are
-    rejected instead of silently ignored.
+    A role is never accepted here: an elevated role is assigned only through
+    the user-management update endpoint.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -47,7 +44,7 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    """Admin-only body for updating a user (role assignment / activation)."""
+    """Body for updating a user (role assignment / activation)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -80,32 +77,3 @@ class UserResponse(BaseModel):
     role: UserRole
     is_active: bool
     created_at: datetime
-
-
-class CurrentUserResponse(UserResponse):
-    """Returned by GET /api/auth/me (the authenticated caller)."""
-
-
-class LoginRequest(BaseModel):
-    """Body of POST /api/auth/login."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    username: str = Field(min_length=1)
-    password: str = Field(min_length=1, max_length=MAX_PASSWORD_LENGTH)
-
-
-class TokenResponse(BaseModel):
-    """Successful login response.
-
-    The token is a bearer access token; ``token_type`` is always "bearer".
-    Basic user information is included so a client can render the logged-in
-    user without a second round trip.
-    """
-
-    access_token: str
-    token_type: str = "bearer"
-    user: UserResponse
-
-
-RegisterRequest = UserCreate

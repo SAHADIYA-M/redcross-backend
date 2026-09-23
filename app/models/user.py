@@ -7,8 +7,10 @@ from pydantic import BaseModel, Field
 class UserRole(str, Enum):
     """Controlled role of a backend user.
 
-    Roles are the only thing authorization depends on. They deliberately form
-    a small set appropriate for a student/hackathon MVP:
+    Roles deliberately form a small set appropriate for a student/hackathon
+    MVP. With the API unauthenticated they are attributes of stored user
+    records; they drive user-management guards (e.g. the final-admin lockout)
+    but do not gate HTTP access.
     - ADMIN     : full backend access; may perform any other role's actions.
     - ASSESSOR  : submits/updates reports and requests assessments.
     - REVIEWER  : performs human verification and review actions.
@@ -23,32 +25,11 @@ class UserRole(str, Enum):
     VIEWER = "VIEWER"
 
 
-# Roles that may create or update reports (i.e. every role except read-only
-# VIEWER). ADMIN always passes every check by construction.
-REPORT_WRITER_ROLES = frozenset(
-    {UserRole.ADMIN, UserRole.ASSESSOR, UserRole.REVIEWER, UserRole.RESPONDER}
-)
-
-# Roles allowed to perform human verification / request assessment.
-REVIEWER_ROLES = frozenset({UserRole.REVIEWER, UserRole.ADMIN})
-
-# Roles allowed to create or update response activities.
-RESPONDER_ROLES = frozenset({UserRole.RESPONDER, UserRole.ADMIN})
-
-# Explicit allow-list for public self-registration. Only the read-only VIEWER
-# role is public; every operational role (ADMIN/REVIEWER/ASSESSOR/RESPONDER)
-# must be assigned by an administrator. A public client can therefore never
-# escalate privileges through registration.
-PUBLIC_REGISTRATION_ROLES = frozenset({UserRole.VIEWER})
-
-
 class User(BaseModel):
-    """Backend representation of an authenticated API user.
+    """Database-independent representation of a stored user record.
 
-    Identifies WHO is making a request. Passwords are never stored in
-    plaintext: only the bcrypt hash is persisted, and the hash is never
-    exposed through public API responses. This entity is database-independent
-    so the API can be developed before the real database is available.
+    Passwords are never stored in plaintext: only the bcrypt hash is
+    persisted, and the hash is never exposed through public API responses.
     """
 
     user_id: str

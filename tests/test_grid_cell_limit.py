@@ -29,7 +29,7 @@ from app.services.report_service import ReportService
 
 
 @pytest.fixture()
-def client(auth_setup, admin_headers):
+def client():
     report_repository = InMemoryReportRepository()
     location_service = LocationService(StubGeocoder())
 
@@ -46,7 +46,6 @@ def client(auth_setup, admin_headers):
         )
     )
     with TestClient(app) as test_client:
-        test_client.headers.update(admin_headers)
         yield test_client
     app.dependency_overrides.clear()
 

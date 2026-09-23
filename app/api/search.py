@@ -12,10 +12,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import get_current_active_user
 from app.api.geocoder_deps import get_optional_location_service
 from app.core.container import get_priority_service, get_report_repository
-from app.models.user import User
 from app.schemas.search import SearchResponse
 from app.search.schemas import SearchQuery
 from app.search.service import LocationSearchUnavailableError, SearchService
@@ -41,10 +39,9 @@ def get_search_service() -> SearchService:
 @router.get("/reports", response_model=SearchResponse)
 def search_reports(
     params: Annotated[SearchQuery, Query()],
-    current_user: Annotated[User, Depends(get_current_active_user)],
     service: Annotated[SearchService, Depends(get_search_service)],
 ) -> SearchResponse:
-    """Search and filter humanitarian reports (authenticated users only).
+    """Search and filter humanitarian reports.
 
     Combines every supplied filter (AND semantics), sorts the matches by the
     allowlisted sort field, and returns ``page_size`` results for the

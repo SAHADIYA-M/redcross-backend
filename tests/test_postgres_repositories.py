@@ -41,10 +41,11 @@ from app.repositories.postgres_repositories import (
     PostgresVerificationRepository,
 )
 from app.response_activity.schemas import ResponseActivity, ResponseStatus
-from app.schemas.auth import UserCreate
+from app.core.security import hash_password
+from app.models.user import User, UserRole
 from app.search.schemas import SearchQuery
 from app.search.service import SearchService
-from app.services.auth_service import AuthService, DuplicateUserError
+from app.services.auth_service import DuplicateUserError
 from app.verification.schemas import (
     VerificationAction,
     VerificationRecord,
@@ -232,12 +233,21 @@ def test_report_get_cluster_candidates_empty_location_parity(factory) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _make_user(username: str, full_name: str | None = None) -> User:
+    return User(
+        user_id=f"{username}-id",
+        username=username,
+        password_hash=hash_password("s3cret-pass"),
+        full_name=full_name,
+        role=UserRole.VIEWER,
+        is_active=True,
+        created_at=datetime(2026, 9, 20, 12, 0, tzinfo=timezone.utc),
+    )
+
+
 def test_user_round_trip(factory) -> None:
     user_repo = PostgresUserRepository(factory)
-    service = AuthService(user_repo)
-    user = service.register(
-        UserCreate(username="alice", password="s3cret-pass", full_name="Alice")
-    )
+    user = user_repo.create_user(_make_user("alice", "Alice"))
     assert user_repo.get_by_id(user.user_id) == user
     by_username = user_repo.get_by_username("ALICE")
     assert by_username is not None and by_username.user_id == user.user_id
@@ -248,22 +258,14 @@ def test_user_round_trip(factory) -> None:
 
 def test_duplicate_username_raises(factory) -> None:
     user_repo = PostgresUserRepository(factory)
-    service = AuthService(user_repo)
-    service.register(
-        UserCreate(username="alice", password="s3cret-pass", full_name="A")
-    )
+    user_repo.create_user(_make_user("alice", "A"))
     with pytest.raises(DuplicateUserError):
-        service.register(
-            UserCreate(username="ALICE", password="other-pass", full_name="B")
-        )
+        user_repo.create_user(_make_user("ALICE", "B"))
 
 
 def test_full_name_empty_round_trips_as_none(factory) -> None:
     user_repo = PostgresUserRepository(factory)
-    service = AuthService(user_repo)
-    user = service.register(
-        UserCreate(username="bob", password="s3cret-pass", full_name=None)
-    )
+    user_repo.create_user(_make_user("bob", None))
     loaded = user_repo.get_by_username("bob")
     assert loaded is not None
     assert loaded.full_name is None

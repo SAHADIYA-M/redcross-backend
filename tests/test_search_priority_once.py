@@ -67,7 +67,7 @@ def _report(
 
 
 @pytest.fixture()
-def priority_client(admin_headers):
+def priority_client():
     """Live app whose search/map services share a counting priority service."""
     reports = InMemoryReportRepository()
     reports.create(_report("r1", "river flooded the market", with_signal=True))
@@ -84,7 +84,6 @@ def priority_client(admin_headers):
     )
 
     with TestClient(app) as client:
-        client.headers.update(admin_headers)
         yield client, counting
     app.dependency_overrides.clear()
 

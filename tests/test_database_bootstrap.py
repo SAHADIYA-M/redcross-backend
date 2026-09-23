@@ -1,7 +1,7 @@
 """Batch 2 regression tests: safe database startup/bootstrap + schema readiness.
 
 Covers the move of database bootstrap from unsafe import-time side effects into
-the FastAPI lifespan, the create-all/readiness/seed behavior, clean failure when
+the FastAPI lifespan, the create-all/readiness behavior, clean failure when
 the database is unavailable during bootstrap, and the guarantee that nothing
 destructive ever happens to existing tables or data.
 
@@ -55,7 +55,7 @@ def test_bootstrap_noop_when_no_database_configured(monkeypatch) -> None:
         lambda: (_ for _ in ()).throw(AssertionError("engine must not be built")),
     )
     # In development the default preserves the old defaults: no table creation,
-    # no readiness enforcement, no seed.
+    # no readiness enforcement.
     bootstrap_module.run_startup_bootstrap()
 
 
@@ -63,7 +63,6 @@ def test_bootstrap_noop_when_all_startup_work_disabled(monkeypatch) -> None:
     monkeypatch.setattr(bootstrap_module.settings, "database_url", "postgresql://db.example/db")
     monkeypatch.setattr(bootstrap_module.settings, "db_create_tables_on_startup", False)
     monkeypatch.setattr(bootstrap_module.settings, "enforce_schema_ready", False)
-    monkeypatch.setattr(bootstrap_module.settings, "seed_dev_admin", False)
     monkeypatch.setattr(
         bootstrap_module,
         "get_engine",
@@ -189,50 +188,6 @@ def test_bootstrap_is_non_destructive_to_existing_tables_and_data(
     assert [row[0] for row in legacy] == ["kept-data"]
     assert [row[0] for row in preserved] == ["existing-1"]
     assert bootstrap_module.missing_schema_tables(engine) == []
-
-
-# ---------------------------------------------------------------------------
-# Seed behavior: once per lifecycle, idempotent
-# ---------------------------------------------------------------------------
-
-
-def test_seed_runs_exactly_once_per_lifecycle(monkeypatch) -> None:
-    calls = []
-
-    def _recording_seed(service):
-        calls.append(service)
-
-    monkeypatch.setattr(bootstrap_module.settings, "seed_dev_admin", True)
-    monkeypatch.setattr(bootstrap_module.settings, "environment", "development")
-    monkeypatch.setattr(
-        "app.services.auth_service.seed_development_admin", _recording_seed
-    )
-    monkeypatch.setattr(
-        "app.core.container.get_auth_service", lambda: object()
-    )
-
-    bootstrap_module.run_startup_bootstrap()
-    assert len(calls) == 1
-
-
-def test_seed_is_idempotent_when_admin_already_exists(monkeypatch) -> None:
-    from app.repositories import InMemoryUserRepository
-    from app.services.auth_service import AuthService, seed_development_admin
-    from app.schemas.auth import UserCreate
-
-    monkeypatch.setattr(bootstrap_module.settings, "seed_dev_admin", True)
-    monkeypatch.setattr(bootstrap_module.settings, "environment", "development")
-
-    service = AuthService(InMemoryUserRepository())
-    service.register(
-        UserCreate(username="dev_admin", password="supersecret1"),
-        role="ADMIN",
-    )
-    # Running the seed again must not create a duplicate admin.
-    seed_development_admin(service)
-    seed_development_admin(service)
-    admins = [u for u in service.list_users() if u.role.value == "ADMIN"]
-    assert len(admins) == 1
 
 
 # ---------------------------------------------------------------------------

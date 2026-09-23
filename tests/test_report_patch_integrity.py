@@ -1,8 +1,9 @@
 """Batch 1 report PATCH security & data-integrity tests.
 
 Covers, through the live API and the service layer:
-- PATCH authorization (authentication + writer role);
-- the audit actor always coming from the authenticated token, never the body;
+- open-access PATCH (the API is unauthenticated; no header is required);
+- the audit actor being null unless the client supplies one — never forged
+  from a token because no token exists;
 - immutable original evidence (``original_text`` cannot be patched);
 - one append-only audit record per effective PATCH;
 - priority recalculation/invalidation after priority-relevant changes and no
@@ -17,11 +18,9 @@ from app.audit.schemas import AuditAction
 from app.models.report import Report
 from app.models.user import User, UserRole
 from app.repositories import InMemoryAuditRepository, InMemoryReportRepository
-from app.schemas.auth import UserUpdate
 from app.schemas.report import UpdateReport
 from app.services.priority_service import PriorityService, priority_level_for_score
 from app.services.report_service import ReportService
-from tests.helpers import headers_for
 
 _ACTOR = User(
     user_id="actor-1",
@@ -63,11 +62,11 @@ def _update_audits(client, report_id: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# 3. PATCH authorization
+# 3. PATCH is open (no authentication required)
 # ---------------------------------------------------------------------------
 
 
-def test_unauthenticated_patch_is_rejected(app_client) -> None:
+def test_patch_is_open_without_auth(app_client) -> None:
     from fastapi.testclient import TestClient
 
     from app.main import app
@@ -77,48 +76,25 @@ def test_unauthenticated_patch_is_rejected(app_client) -> None:
         response = bare.patch(
             f"/api/reports/{report['id']}", json={"status": "IN_REVIEW"}
         )
-    assert response.status_code == 401
-
-
-def test_viewer_patch_is_forbidden_and_unaudited(app_client, auth_setup) -> None:
-    report = _create(app_client)
-    response = app_client.patch(
-        f"/api/reports/{report['id']}",
-        json={"status": "IN_REVIEW"},
-        headers=headers_for(auth_setup, UserRole.VIEWER),
-    )
-    assert response.status_code == 403
-    assert _update_audits(app_client, report["id"]) == []
-
-
-def test_inactive_writer_patch_is_forbidden(app_client, auth_setup) -> None:
-    report = _create(app_client)
-    assessor = auth_setup.users[UserRole.ASSESSOR]
-    auth_setup.service.update_user(
-        assessor.user_id, UserUpdate(is_active=False), "admin-actor"
-    )
-    response = app_client.patch(
-        f"/api/reports/{report['id']}",
-        json={"status": "IN_REVIEW"},
-        headers=headers_for(auth_setup, UserRole.ASSESSOR),
-    )
-    assert response.status_code == 403
-
-
-def test_authorized_writer_patch_succeeds(app_client, auth_setup) -> None:
-    report = _create(app_client)
-    response = app_client.patch(
-        f"/api/reports/{report['id']}",
-        json={"status": "IN_REVIEW"},
-        headers=headers_for(auth_setup, UserRole.ASSESSOR),
-    )
     assert response.status_code == 200
     assert response.json()["status"] == "IN_REVIEW"
 
 
-def test_patch_actor_comes_from_token_not_body(app_client, auth_setup) -> None:
+def test_patch_without_identity_records_null_actor(app_client) -> None:
     report = _create(app_client)
-    assessor = auth_setup.users[UserRole.ASSESSOR]
+    response = app_client.patch(
+        f"/api/reports/{report['id']}", json={"status": "IN_REVIEW"}
+    )
+    assert response.status_code == 200
+    audits = _update_audits(app_client, report["id"])
+    assert len(audits) == 1
+    # No token identity exists; actor fields in the body are unknown fields
+    # and are ignored, so the audit actor stays null.
+    assert audits[0]["actor_id"] is None
+
+
+def test_patch_ignores_actor_fields_in_body(app_client) -> None:
+    report = _create(app_client)
     response = app_client.patch(
         f"/api/reports/{report['id']}",
         json={
@@ -127,13 +103,11 @@ def test_patch_actor_comes_from_token_not_body(app_client, auth_setup) -> None:
             "actor": "santa-claus",
             "reviewer_id": "santa-claus",
         },
-        headers=headers_for(auth_setup, UserRole.ASSESSOR),
     )
     assert response.status_code == 200
     audits = _update_audits(app_client, report["id"])
     assert len(audits) == 1
-    assert audits[0]["actor_id"] == assessor.user_id
-    assert audits[0]["actor_id"] != "santa-claus"
+    assert audits[0]["actor_id"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -194,19 +168,17 @@ def test_unrelated_editable_fields_still_update(app_client) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_successful_patch_creates_expected_audit(app_client, auth_setup) -> None:
+def test_successful_patch_creates_expected_audit(app_client) -> None:
     report = _create(app_client, severity="HIGH")
-    assessor = auth_setup.users[UserRole.ASSESSOR]
     app_client.patch(
         f"/api/reports/{report['id']}",
         json={"severity": "CRITICAL"},
-        headers=headers_for(auth_setup, UserRole.ASSESSOR),
     )
     audits = _update_audits(app_client, report["id"])
     assert len(audits) == 1
     record = audits[0]
     assert record["report_id"] == report["id"]
-    assert record["actor_id"] == assessor.user_id
+    assert record["actor_id"] is None
     assert record["old_value"] == {"severity": "HIGH"}
     assert record["new_value"] == {"severity": "CRITICAL"}
     assert record["timestamp"]
@@ -362,13 +334,12 @@ def test_priority_invalidated_when_signal_removed() -> None:
 
 
 def test_patch_preserves_verification_and_original_evidence(
-    app_client, auth_setup
+    app_client,
 ) -> None:
     report = _create(app_client)
     app_client.patch(
         f"/api/reports/{report['id']}/verify",
         json={"action": "APPROVE", "reason": "confirmed"},
-        headers=headers_for(auth_setup, UserRole.REVIEWER),
     )
 
     app_client.patch(

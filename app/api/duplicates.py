@@ -3,9 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import get_current_active_user
 from app.core.container import get_duplicate_service
-from app.models.user import User
 from app.schemas.duplicate import DuplicateDetectionResponse
 from app.services.report_service import ReportNotFoundError
 
@@ -15,7 +13,6 @@ router = APIRouter(prefix="/api/reports", tags=["duplicates"])
 @router.post("/{report_id}/duplicates", response_model=DuplicateDetectionResponse)
 def detect_duplicates(
     report_id: str,
-    current_user: Annotated[User, Depends(get_current_active_user)],
     service: Annotated[DuplicateDetectionService, Depends(get_duplicate_service)],
 ) -> DuplicateDetectionResponse:
     try:

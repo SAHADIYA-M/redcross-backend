@@ -33,7 +33,7 @@ SENSITIVE_KEYS = {"notes", "affected_population"}
 
 
 @pytest.fixture()
-def client(auth_setup, admin_headers):
+def client():
     report_repository = InMemoryReportRepository()
     response_repository = InMemoryResponseRepository()
     verification_repository = InMemoryVerificationRepository()
@@ -68,7 +68,6 @@ def client(auth_setup, admin_headers):
         lambda: ResponseMapService(response_repository, location_service)
     )
     with TestClient(app) as test_client:
-        test_client.headers.update(admin_headers)
         yield test_client
     app.dependency_overrides.clear()
 

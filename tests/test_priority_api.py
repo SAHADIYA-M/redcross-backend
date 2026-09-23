@@ -4,17 +4,15 @@ from fastapi.testclient import TestClient
 from app.api.priority import get_priority_service
 from app.api.reports import get_report_service
 from app.main import app
-from app.models.user import UserRole
 from app.repositories import InMemoryReportRepository
 from app.services.priority_service import PriorityService
 from app.services.report_service import ReportService
-from tests.helpers import headers_for
 
 BASE_TIME = "2026-09-20T10:00:00Z"
 
 
 @pytest.fixture()
-def client(auth_setup, admin_headers):
+def client():
     """Share ONE repository between report creation and priority calculation."""
     repository = InMemoryReportRepository()
     app.dependency_overrides[get_report_service] = lambda: ReportService(repository)
@@ -22,7 +20,6 @@ def client(auth_setup, admin_headers):
         lambda: PriorityService(repository)
     )
     with TestClient(app) as test_client:
-        test_client.headers.update(admin_headers)
         yield test_client
     app.dependency_overrides.clear()
 
@@ -78,20 +75,10 @@ def test_priority_nonexistent_report_returns_404(client: TestClient) -> None:
     assert "not found" in response.json()["detail"].lower()
 
 
-def test_priority_forbidden_for_viewer_and_responder(
-    client: TestClient, auth_setup
+def test_priority_is_open_and_preserves_no_header_identity(
+    client: TestClient,
 ) -> None:
-    """Requesting a priority calculation is an assessment action, not a read."""
-    report = _create(client)
-    for role in (UserRole.VIEWER, UserRole.RESPONDER):
-        response = client.post(
-            f"/api/reports/{report['id']}/priority",
-            headers=headers_for(auth_setup, role),
-        )
-        assert response.status_code == 403, role.value
-
-
-def test_priority_allowed_for_assessor(client: TestClient, auth_setup) -> None:
+    """Priority calculation is public; no Authorization header is needed."""
     report = _create(
         client,
         severity="HIGH",
@@ -102,7 +89,6 @@ def test_priority_allowed_for_assessor(client: TestClient, auth_setup) -> None:
     )
     response = client.post(
         f"/api/reports/{report['id']}/priority",
-        headers=headers_for(auth_setup, UserRole.ASSESSOR),
     )
     assert response.status_code == 200, response.text
 

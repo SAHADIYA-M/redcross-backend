@@ -2,28 +2,23 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import require_roles
 from app.audit.schemas import AuditAction, AuditRecord
 from app.core.container import get_audit_repository
-from app.models.user import REVIEWER_ROLES, User
 from app.repositories.audit_repository import AuditRepository
 from app.schemas.lengths import DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
 
-_audit_reader = require_roles(*sorted(REVIEWER_ROLES))
-
 
 @router.get("", response_model=list[AuditRecord])
 def list_audit_records(
     repository: Annotated[AuditRepository, Depends(get_audit_repository)],
-    current_user: Annotated[User, Depends(_audit_reader)],
     report_id: str | None = None,
     action: AuditAction | None = None,
     limit: int = Query(default=DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT),
     offset: int = Query(default=0, ge=0),
 ) -> list[AuditRecord]:
-    """Query the append-only audit trail (REVIEWER or ADMIN only).
+    """Query the append-only audit trail.
 
     Optional filters: report ID and audit action. Records are returned newest
     first, bounded by ``limit`` (1-1000, default 100) with ``offset`` paging.

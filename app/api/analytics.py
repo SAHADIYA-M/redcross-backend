@@ -12,13 +12,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import get_current_active_user
 from app.core.container import (
     get_priority_service,
     get_report_repository,
     get_response_repository,
 )
-from app.models.user import User
 from app.response_activity.schemas import (
     CoverageQuery,
     CoverageResponse,
@@ -50,13 +48,12 @@ def get_response_coverage_service() -> ResponseCoverageService:
 )
 def response_coverage(
     params: Annotated[CoverageQuery, Query()],
-    current_user: Annotated[User, Depends(get_current_active_user)],
     service: Annotated[
         ResponseCoverageService,
         Depends(get_response_coverage_service),
     ],
 ) -> CoverageResponse:
-    """Compare reported needs against recorded response activities (auth required).
+    """Compare reported needs against recorded response activities.
 
     Returns one row per REPORTED need of the matching reports. Priority and
     verification status of the reported need are preserved for context and are

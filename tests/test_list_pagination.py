@@ -143,12 +143,38 @@ def test_audit_list_respects_limit_and_offset(app_client: TestClient) -> None:
 
 
 def test_users_list_respects_limit_and_offset(app_client: TestClient) -> None:
-    all_users = app_client.get("/api/users").json()
-    assert len(all_users) >= 2  # one seeded user per role
-    listing = app_client.get("/api/users", params={"limit": 1}).json()
-    assert len(listing) == 1
-    next_page = app_client.get(
-        "/api/users", params={"limit": 1, "offset": 1}
-    ).json()
-    assert len(next_page) == 1
-    assert next_page[0]["user_id"] != listing[0]["user_id"]
+    from datetime import datetime, timezone
+
+    from app.api.users import get_auth_service
+    from app.core.security import hash_password
+    from app.main import app
+    from app.models.user import User, UserRole
+    from app.repositories import InMemoryUserRepository
+    from app.services.auth_service import AuthService
+
+    repository = InMemoryUserRepository()
+    for index in range(3):
+        repository.create_user(
+            User(
+                user_id=f"uid-{index}",
+                username=f"user{index}",
+                password_hash=hash_password("s3cret-pass"),
+                full_name=f"User {index}",
+                role=UserRole.VIEWER,
+                is_active=True,
+                created_at=datetime(2026, 9, 20, tzinfo=timezone.utc),
+            )
+        )
+    app.dependency_overrides[get_auth_service] = lambda: AuthService(repository)
+    try:
+        all_users = app_client.get("/api/users").json()
+        assert len(all_users) == 3
+        listing = app_client.get("/api/users", params={"limit": 1}).json()
+        assert len(listing) == 1
+        next_page = app_client.get(
+            "/api/users", params={"limit": 1, "offset": 1}
+        ).json()
+        assert len(next_page) == 1
+        assert next_page[0]["user_id"] != listing[0]["user_id"]
+    finally:
+        app.dependency_overrides.pop(get_auth_service, None)
