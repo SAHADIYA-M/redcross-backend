@@ -1,0 +1,1 @@
+"""Response Activity domain package (Phase 12)."""
