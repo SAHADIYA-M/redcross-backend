@@ -1,4 +1,4 @@
-# RedCross Nexus — Backend
+# RedCross CrisisSync — Backend
 
 > Humanitarian crisis-intelligence API powering the RedCross Nexus dashboard.  
 > Built with **Python · FastAPI · Google Gemini · SQLAlchemy · Supabase (PostgreSQL)**.
